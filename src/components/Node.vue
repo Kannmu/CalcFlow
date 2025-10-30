@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, toRefs, onMounted, onUnmounted, nextTick } from 'vue'
 import Element from './Element.vue'
+import LatexRenderer from './LatexRenderer.vue'
 import { generateRandomColor, nodeManager } from '../utils.js'
 
 const props = defineProps({
@@ -23,29 +24,53 @@ const lastResult = ref(null)
 let recalculateTimer = null
 
 function decodeElements(expression) {
-    if (!expression) {
-        return [];
-    }
-    const regex = /(\d+\.?\d*)|([a-zA-Z_][a-zA-Z0-9_]*)|([+\-*/()])/g;
+    if (!expression) return [];
     const tokens = [];
-    let match;
+    const expr = String(expression).trim();
+    let i = 0;
 
-    while ((match = regex.exec(expression)) !== null) {
-        const value = match[0];
-        let type = 'unknown';
-        if (match[1]) {
-            type = 'number';
-        } else if (match[2]) {
-            type = 'reference';
-        } else if (match[3]) {
-            if ('+-*/'.includes(value)) {
-                type = 'operator';
-            } else if ('()'.includes(value)) {
-                type = 'parenthesis';
-            }
+    const isLetter = (c) => /[a-zA-Z_]/.test(c);
+    const isDigit = (c) => /[0-9]/.test(c);
+
+    while (i < expr.length) {
+        const c = expr[i];
+
+        if (c === ' ' || c === '\t' || c === '\n') { i++; continue; }
+
+        if (isDigit(c) || (c === '.' && i + 1 < expr.length && isDigit(expr[i + 1]))) {
+            const start = i;
+            i++;
+            while (i < expr.length && (isDigit(expr[i]) || expr[i] === '.')) i++;
+            const value = expr.slice(start, i);
+            tokens.push({ type: 'number', value });
+            continue;
         }
 
-        tokens.push({ type, value });
+        if (isLetter(c)) {
+            const start = i;
+            i++;
+            while (i < expr.length && /[a-zA-Z0-9_]/.test(expr[i])) i++;
+            const ident = expr.slice(start, i);
+
+            let j = i;
+            while (j < expr.length && /\s/.test(expr[j])) j++;
+            if (expr[j] === '(') {
+                tokens.push({ type: 'function', value: ident.toLowerCase() });
+            } else {
+                if (ident.toLowerCase() === 'pi') {
+                    tokens.push({ type: 'constant', value: ident.toLowerCase() });
+                } else {
+                    tokens.push({ type: 'reference', value: ident });
+                }
+            }
+            continue;
+        }
+
+        if ('+-*/'.includes(c)) { tokens.push({ type: 'operator', value: c }); i++; continue; }
+        if (c === '(' || c === ')') { tokens.push({ type: 'parenthesis', value: c }); i++; continue; }
+        if (c === ',') { tokens.push({ type: 'comma', value: ',' }); i++; continue; }
+
+        i++;
     }
 
     return tokens;
@@ -54,6 +79,162 @@ function decodeElements(expression) {
 const elementBackgroundColor = computed(() => generateRandomColor(props.header + expression.value + "Node", 25, 100))
 
 const decodedElements = computed(() => decodeElements(expression.value));
+
+function parseTokens(tokens) {
+    let pos = 0
+    function peek() { return tokens[pos] || null }
+    function consume() { return tokens[pos++] }
+    function parseExpression() {
+        let node = parseTerm()
+        while (true) {
+            const t = peek()
+            if (t && t.type === 'operator' && (t.value === '+' || t.value === '-')) {
+                consume()
+                const right = parseTerm()
+                node = { type: 'BinaryOp', op: t.value, left: node, right }
+            } else {
+                break
+            }
+        }
+        return node
+    }
+    function parseTerm() {
+        let node = parseFactor()
+        while (true) {
+            const t = peek()
+            if (t && t.type === 'operator' && (t.value === '*' || t.value === '/')) {
+                consume()
+                const right = parseFactor()
+                node = { type: 'BinaryOp', op: t.value, left: node, right }
+            } else {
+                break
+            }
+        }
+        return node
+    }
+    function parseFactor() {
+        const t = peek()
+        if (!t) return { type: 'Number', value: 0 }
+        if (t.type === 'operator' && t.value === '-') {
+            consume()
+            const e = parseFactor()
+            return { type: 'UnaryOp', op: '-', expr: e }
+        }
+        if (t.type === 'number') { consume(); return { type: 'Number', value: t.value } }
+        if (t.type === 'reference') { consume(); return { type: 'Reference', name: t.value } }
+        if (t.type === 'constant') { consume(); return { type: 'Constant', name: t.value } }
+        if (t.type === 'function') {
+            const fn = t.value
+            consume()
+            const p = peek()
+            if (!p || p.type !== 'parenthesis' || p.value !== '(') {
+                return { type: 'Reference', name: fn }
+            }
+            consume()
+            const args = []
+            if (peek() && !(peek().type === 'parenthesis' && peek().value === ')')) {
+                args.push(parseExpression())
+                while (peek() && peek().type === 'comma') {
+                    consume()
+                    args.push(parseExpression())
+                }
+            }
+            if (peek() && peek().type === 'parenthesis' && peek().value === ')') consume()
+            return { type: 'Function', name: fn, args }
+        }
+        if (t.type === 'parenthesis' && t.value === '(') {
+            consume()
+            const node = parseExpression()
+            if (peek() && peek().type === 'parenthesis' && peek().value === ')') consume()
+            return { type: 'Group', expr: node }
+        }
+        consume()
+        return { type: 'Reference', name: String(t.value || '') }
+    }
+    return parseExpression()
+}
+
+function astToLatex(node) {
+    function wrapParens(s) { return "\\left(" + s + "\\right)" }
+    function needsParens(n) { return n && n.type === 'BinaryOp' }
+    function latexOf(n) {
+        if (!n) return ''
+        if (n.type === 'Number') return String(n.value)
+        if (n.type === 'Reference') return n.name
+        if (n.type === 'Constant') return n.name === 'pi' ? '\\pi' : n.name
+        if (n.type === 'UnaryOp') {
+            const inner = latexOf(n.expr)
+            if (n.expr && (n.expr.type === 'BinaryOp' || n.expr.type === 'Function' || n.expr.type === 'Group')) {
+                return '-' + wrapParens(inner)
+            } else {
+                return '-' + inner
+            }
+        }
+        if (n.type === 'BinaryOp') {
+            if (n.op === '/') return '\\frac{' + latexOf(n.left) + '}{' + latexOf(n.right) + '}'
+            const sym = n.op === '*' ? '\\cdot' : n.op
+            const left = latexOf(n.left)
+            const right = latexOf(n.right)
+            return left + ' ' + sym + ' ' + right
+        }
+        if (n.type === 'Group') return wrapParens(latexOf(n.expr))
+        if (n.type === 'Function') {
+            const nm = n.name
+            if (nm === 'sqrt') {
+                const arg = latexOf(n.args[0] || { type: 'Number', value: 0 })
+                return '\\sqrt{' + arg + '}'
+            }
+            if (nm === 'pow') {
+                const a = n.args[0] ? latexOf(n.args[0]) : ''
+                const b = n.args[1] ? latexOf(n.args[1]) : ''
+                const base = needsParens(n.args[0]) ? wrapParens(a) : a
+                return base + '^{' + b + '}'
+            }
+            if (nm === 'log') {
+                const a = n.args[0] ? latexOf(n.args[0]) : ''
+                const b = n.args[1] ? latexOf(n.args[1]) : ''
+                return '\\log_{' + b + '}\\left(' + a + '\\right)'
+            }
+            const one = { sin: '\\sin', cos: '\\cos', tan: '\\tan', ln: '\\ln' }
+            if (one[nm]) {
+                const arg = latexOf(n.args[0] || { type: 'Number', value: 0 })
+                return one[nm] + '\\left(' + arg + '\\right)'
+            }
+            const joined = n.args.map(a => latexOf(a)).join(',\\,')
+            return n.name + '\\left(' + joined + '\\right)'
+        }
+        return ''
+    }
+    return latexOf(node)
+}
+
+function formatResultLatex(val) {
+    if (typeof val !== 'number') {
+        const s = String(val)
+        return '\\text{' + s.replace(/\\/g, '\\\\').replace(/[{}]/g, '') + '}'
+    }
+    const s = String(val)
+    const absValue = Math.abs(val)
+    const integerPartLength = Math.trunc(absValue).toString().length
+    const decimalPart = s.split('.')[1]
+    if (integerPartLength > 6 || (decimalPart && decimalPart.length > 3)) {
+        const expStr = val.toExponential(4).toLowerCase()
+        const m = expStr.match(/^(-?\d+(?:\.\d+)?)e([+-]?\d+)$/)
+        if (m) {
+            return m[1] + ' \\times 10^{' + m[2] + '}'
+        }
+        return expStr
+    }
+    return s
+}
+
+const latexExpression = computed(() => {
+    const tokens = decodeElements(expression.value)
+    const ast = parseTokens(tokens)
+    const left = astToLatex(ast)
+    const right = formatResultLatex(result.value)
+    return left + ' = ' + right
+})
 
 function onElementUpdate(index, newValue) {
     const tokens = decodedElements.value.map(t => ({ ...t }));
@@ -86,58 +267,120 @@ function applyOp(op, b, a) {
 function evaluate(tokens) {
     if (!tokens || tokens.length === 0) return 0;
 
-    let values = [];
-    let ops = [];
-
-    const applyTopOp = () => {
-        if (ops.length === 0 || values.length < 2) return false;
-        const op = ops[ops.length - 1];
-        if (op === '(') return false;
-
-        ops.pop();
-        const val2 = values.pop();
-        const val1 = values.pop();
-        values.push(applyOp(op, val2, val1));
-        return true;
-    };
+    const output = [];
+    const ops = [];
 
     for (const token of tokens) {
-        if (token.type === 'number') {
-            values.push(parseFloat(token.value));
-        } else if (token.type === 'reference') {
-            const referencedNode = nodeManager.getNodeByHeader(token.value);
-            if (referencedNode) {
-                values.push(referencedNode.result || 0);
+        if (token.type === 'number' || token.type === 'reference' || token.type === 'constant') {
+            output.push(token);
+            continue;
+        }
+
+        if (token.type === 'function') {
+            ops.push(token);
+            continue;
+        }
+
+        if (token.type === 'operator') {
+            while (ops.length && ops[ops.length - 1].type === 'operator' && precedence(ops[ops.length - 1].value) >= precedence(token.value)) {
+                output.push(ops.pop());
+            }
+            ops.push(token);
+            continue;
+        }
+
+        if (token.type === 'comma') {
+            while (ops.length && !(ops[ops.length - 1].type === 'parenthesis' && ops[ops.length - 1].value === '(')) {
+                output.push(ops.pop());
+            }
+            continue;
+        }
+
+        if (token.type === 'parenthesis') {
+            if (token.value === '(') {
+                ops.push(token);
             } else {
-                values.push(0);
+                while (ops.length && !(ops[ops.length - 1].type === 'parenthesis' && ops[ops.length - 1].value === '(')) {
+                    output.push(ops.pop());
+                }
+                if (ops.length === 0) return 'Error';
+                ops.pop();
+                if (ops.length && ops[ops.length - 1].type === 'function') {
+                    output.push(ops.pop());
+                }
             }
-        } else if (token.value === '(') {
-            ops.push(token.value);
-        } else if (token.value === ')') {
-            while (ops.length && ops[ops.length - 1] !== '(') {
-                if (!applyTopOp()) return NaN;
-            }
-            if (ops.length === 0) return NaN;
-            ops.pop();
-        } else if (token.type === 'operator') {
-            while (ops.length && precedence(ops[ops.length - 1]) >= precedence(token.value)) {
-                if (!applyTopOp()) break;
-            }
-            ops.push(token.value);
+            continue;
         }
     }
 
-    while (ops.length > 0) {
-        if (ops[ops.length - 1] === '(') return NaN;
-        if (!applyTopOp()) break;
+    while (ops.length) {
+        const top = ops[ops.length - 1];
+        if (top.type === 'parenthesis' && top.value === '(') return 'Error';
+        output.push(ops.pop());
     }
 
-    if (values.length > 0) {
-        const lastValue = values[values.length - 1];
-        return isNaN(lastValue) ? 'Error' : lastValue;
+    const stack = [];
+    for (const t of output) {
+        if (t.type === 'number') {
+            stack.push(parseFloat(t.value));
+            continue;
+        }
+
+        if (t.type === 'reference') {
+            const referencedNode = nodeManager.getNodeByHeader(t.value);
+            if (referencedNode) {
+                const r = referencedNode.result;
+                stack.push(typeof r === 'number' ? r : (parseFloat(r) || 0));
+            } else {
+                stack.push(0);
+            }
+            continue;
+        }
+
+        if (t.type === 'constant') {
+            stack.push(Math.PI);
+            continue;
+        }
+
+        if (t.type === 'operator') {
+            if (stack.length < 2) return 'Error';
+            const b = stack.pop();
+            const a = stack.pop();
+            const v = applyOp(t.value, b, a);
+            stack.push(v);
+            continue;
+        }
+
+        if (t.type === 'function') {
+            const name = t.value;
+            if (name === 'pow' || name === 'log') {
+                if (stack.length < 2) return 'Error';
+                const b = stack.pop();
+                const a = stack.pop();
+                if (name === 'pow') {
+                    stack.push(Math.pow(a, b));
+                } else {
+                    const valid = a > 0 && b > 0 && b !== 1;
+                    stack.push(valid ? (Math.log(a) / Math.log(b)) : NaN);
+                }
+            } else if (name === 'sin' || name === 'cos' || name === 'tan' || name === 'sqrt' || name === 'ln') {
+                if (stack.length < 1) return 'Error';
+                const a = stack.pop();
+                if (name === 'sin') stack.push(Math.sin(a));
+                else if (name === 'cos') stack.push(Math.cos(a));
+                else if (name === 'tan') stack.push(Math.tan(a));
+                else if (name === 'sqrt') stack.push(a < 0 ? NaN : Math.sqrt(a));
+                else if (name === 'ln') stack.push(a <= 0 ? NaN : Math.log(a));
+            } else {
+                return 'Error';
+            }
+            continue;
+        }
     }
 
-    return 0;
+    if (stack.length === 0) return 0;
+    const res = stack[stack.length - 1];
+    return isNaN(res) ? 'Error' : res;
 }
 
 function updateDependencies() {
@@ -256,6 +499,9 @@ onUnmounted(() => {
 <template>
     <div class="node" :style="{ backgroundColor: elementBackgroundColor }">
         <button class="delete-button" @click="$emit('delete')">X</button>
+        <div class="node-latex">
+            <LatexRenderer :latex="latexExpression" />
+        </div>
         <div class="node-elements">
             <div class="node-elements-input">
                 <span v-for="(element, index) in decodedElements" :key="index">
@@ -266,10 +512,19 @@ onUnmounted(() => {
                         :isRef="true" :isResult="false" @update:content="onElementUpdate(index, $event)" />
 
                     </span>
+                    <span v-else-if="element.type === 'function'" class="node-elements-function">
+                        {{ element.value }}
+                    </span>
                     <span v-else-if="element.type === 'operator'" class="node-elements-operator">
                         {{ element.value }}
                     </span>
                     <span v-else-if="element.type === 'parenthesis'" class="node-elements-operator-parenthesis">
+                        {{ element.value }}
+                    </span>
+                    <span v-else-if="element.type === 'comma'" class="node-elements-comma">
+                        ,
+                    </span>
+                    <span v-else-if="element.type === 'constant'" class="node-elements-constant">
                         {{ element.value }}
                     </span>
                     <span v-else-if="element.type === 'number'">
@@ -355,6 +610,27 @@ onUnmounted(() => {
     margin: 0 3px;
 }
 
+.node-elements-function {
+    color: #000;
+    font-size: 18px;
+    font-weight: bold;
+    margin: 0 3px;
+}
+
+.node-elements-comma {
+    color: #000;
+    font-size: 18px;
+    font-weight: bold;
+    margin: 0 3px;
+}
+
+.node-elements-constant {
+    color: #000;
+    font-size: 18px;
+    font-weight: bold;
+    margin: 0 3px;
+}
+
 .node-elements-operator-equal {
     color: #000;
     font-size: 20px;
@@ -395,5 +671,8 @@ onUnmounted(() => {
     border: 2px;
     background-color: rgba(255, 255, 255, 0.5);
     outline: 1px solid #ffffff;
+}
+.node-latex {
+    margin-bottom: 6px;
 }
 </style>

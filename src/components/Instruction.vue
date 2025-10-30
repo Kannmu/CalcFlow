@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-
+import LatexRenderer from './LatexRenderer.vue'
 const isOpen = ref(false)
 
 const togglePanel = () => {
@@ -27,6 +27,13 @@ const togglePanel = () => {
           <li>Subtraction: <code>-</code></li>
           <li>Multiplication: <code>*</code></li>
           <li>Division: <code>/</code></li>
+          <li><LatexRenderer latex="x^y" displayMode="false"></LatexRenderer> <code>pow(x,y)</code></li>
+          <li><LatexRenderer latex="\sin(x)" displayMode="false"></LatexRenderer> <code>sin(x)</code></li>
+          <li><LatexRenderer latex="\cos(x)" displayMode="false"></LatexRenderer> <code>cos(x)</code></li>
+          <li><LatexRenderer latex="\tan(x)" displayMode="false"></LatexRenderer> <code>tan(x)</code></li>
+          <li><LatexRenderer latex="\sqrt{x}" displayMode="false"></LatexRenderer> <code>sqrt(x)</code></li>
+          <li><LatexRenderer latex="\log_{y}(x)" displayMode="false"></LatexRenderer> <code>log(x,y)</code></li>
+          <li><LatexRenderer latex="\ln(x)" displayMode="false"></LatexRenderer> <code>ln(x)</code></li>
         </ul>
       </div>
     </div>
@@ -39,8 +46,8 @@ const togglePanel = () => {
   position: fixed;
   top: 1.5rem;
   right: 1.5rem;
-  width: 50px;
-  height: 50px;
+  width: 70px;
+  height: 70px;
   background: white;
   border-radius: 50%;
   border: 1px solid #e2e8f0;
@@ -131,12 +138,12 @@ const togglePanel = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0;
+  padding: 0 0;
 }
 
 .operator-list code {
   background: #f1f5f9;
-  color: #1e293b;
+  color: #213b1e;
   padding: 0.25rem 0.5rem;
   border-radius: 0.5rem;
   font-weight: 600;
