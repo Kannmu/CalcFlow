@@ -51,7 +51,7 @@ function decodeElements(expression) {
     return tokens;
 }
 
-const elementBackgroundColor = computed(() => generateRandomColor(props.header + expression.value + "Node", 25, 70))
+const elementBackgroundColor = computed(() => generateRandomColor(props.header + expression.value + "Node", 25, 100))
 
 const decodedElements = computed(() => decodeElements(expression.value));
 
@@ -261,8 +261,9 @@ onUnmounted(() => {
                 <span v-for="(element, index) in decodedElements" :key="index">
                     <span v-if="element.type === 'reference'">
                         
-                        <Element :key="element.value" :header="element.value" :content="element.value" 
-                        :isResult="false" @update:content="onElementUpdate(index, $event)" />
+                        <Element :key="element.value" :header="element.value" 
+                        :content="nodeManager.getNodeByHeader(element.value)?.result || 0" 
+                        :isRef="true" :isResult="false" @update:content="onElementUpdate(index, $event)" />
 
                     </span>
                     <span v-else-if="element.type === 'operator'" class="node-elements-operator">
@@ -316,11 +317,11 @@ onUnmounted(() => {
     color: rgb(0, 0, 0);
     border: 2px solid #000000;
     border-radius: 50%;
-    width: 20px;
-    height: 20px;
+    width: 30px;
+    height: 30px;
     cursor: pointer;
     font-weight: bold;
-    font-size: 14px;
+    font-size: 18px;
     display: flex;
     justify-content: center;
     align-items: center;

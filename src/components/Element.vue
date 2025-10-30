@@ -1,5 +1,5 @@
 <script setup>
-import { ref, toRefs, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, toRefs, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { generateRandomColor } from '../utils.js'
 
 const emit = defineEmits(['update:content','update:header'])
@@ -11,13 +11,31 @@ const props = defineProps({
     isResult: Boolean,
 })
 
-const position = ref({ x: 0, y: 0 })
 
 const { header } = toRefs(props)
 const editableHeader = ref(header.value)
 
+const headerInputRef = ref(null)
+const contentInputRef = ref(null)
+
+const adjustInputWidth = (inputElement, value) => {
+    if (!inputElement) return
+    
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    const computedStyle = window.getComputedStyle(inputElement)
+    context.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`
+    
+    const textWidth = context.measureText(value || '').width
+    const minWidth = Math.max(textWidth + 20, 30)
+    inputElement.style.width = `${minWidth}px`
+}
+
 watch(editableHeader, (newValue) => {
     emit('update:header', newValue)
+    nextTick(() => {
+        adjustInputWidth(headerInputRef.value, newValue)
+    })
 })
 
 const { content } = toRefs(props)
@@ -25,6 +43,9 @@ const internalContent = ref(content.value)
 
 watch(content, (newValue) => {
     internalContent.value = newValue
+    nextTick(() => {
+        adjustInputWidth(contentInputRef.value, String(newValue))
+    })
 })
 
 const isEditing = ref(false)
@@ -39,14 +60,14 @@ const editableContent = computed({
             const absValue = Math.abs(content)
             const integerPartLength = Math.trunc(absValue).toString().length
             const decimalPart = s.split('.')[1]
-            if (integerPartLength > 3 || (decimalPart && decimalPart.length > 3)) {
-                return content.toExponential(3)
+            if (integerPartLength > 6 || (decimalPart && decimalPart.length > 3)) {
+                return content.toExponential(6)
             }
         }
         return internalContent.value
     },
     set(val) {
-        if (props.isResult) {
+        if (props.isResult || props.isRef) {
             return
         }
         const sVal = String(val).trim()
@@ -63,6 +84,9 @@ const editableContent = computed({
         }
         internalContent.value = newValue
         emit('update:content', newValue)
+        nextTick(() => {
+            adjustInputWidth(contentInputRef.value, String(newValue))
+        })
     },
 })
 
@@ -89,6 +113,11 @@ const copyToClipboard = () => {
 }
 
 onMounted(() => {
+    nextTick(() => {
+        adjustInputWidth(headerInputRef.value, editableHeader.value)
+        adjustInputWidth(contentInputRef.value, String(internalContent.value))
+    })
+    
     return () => {
         document.removeEventListener('click', handleClickOutside, true)
     }
@@ -97,19 +126,19 @@ onMounted(() => {
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside, true)
 })
-""
 
 </script>
 
 <template>
     <div class="element" :style="{ backgroundColor: elementBackgroundColor }">
         <div class="element-header">
-            <input class="element-header-input" v-model="editableHeader" />
+            <div v-if="isRef" class="element-header-display">{{ editableHeader }}</div>
+            <input v-else ref="headerInputRef" class="element-header-input" v-model="editableHeader" />
         </div>
         <hr class="element-header-line" />
         <div class="element-content" @contextmenu="openMenu">
-            <div v-if="isResult" class="element-content-input">{{ editableContent }}</div>
-            <input v-else class="element-content-input" v-model="editableContent" @focus="isEditing = true" @blur="isEditing = false" />
+            <div v-if="isResult || isRef" class="element-content-input">{{ editableContent }}</div>
+            <input v-else ref="contentInputRef" class="element-content-input" v-model="editableContent" @focus="isEditing = true" @blur="isEditing = false" />
             <div v-if="showMenu" class="context-menu" :style="{ top: menuPosition.y + 'px', left: menuPosition.x + 'px' }">
                 <div class="context-menu-item" @click="copyToClipboard">Copy</div>
             </div>
@@ -122,10 +151,11 @@ onUnmounted(() => {
     border: 2px solid #000000;
     background-color: #ffffff;
     padding: 5px;
-    display: flex;
+    display: inline-flex;
     flex-direction: column;
     align-items: center;
-    width: 80px;
+    width: auto;
+    min-width: fit-content;
     border-radius: 8px;
 }
 
@@ -145,8 +175,22 @@ onUnmounted(() => {
     font-weight: bold;
     border: none;
     text-align: center;
-    width: 100%;
+    width: auto;
+    min-width: 1ch;
     border-radius: 4px;
+}
+
+.element-header-display {
+    color: #000000;
+    background-color: transparent;
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+    text-align: center;
+    width: auto;
+    min-width: 1ch;
+    border-radius: 4px;
+    padding: 0;
 }
 
 .element-header-input:focus {
@@ -179,7 +223,8 @@ onUnmounted(() => {
     border: none;
     text-align: center;
     font-weight: bold;
-    width: 100%;
+    width: auto;
+    min-width: 1ch;
     border-radius: 4px;
     padding: 0;
     line-height: normal;

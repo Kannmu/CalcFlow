@@ -172,8 +172,8 @@ export function generateRandomColor(str, saturation, lightness) {
     const sat_variation = (Math.abs(hash) >> 8) % 21 - 10;
     const light_variation = (Math.abs(hash) >> 16) % 31 - 15;
 
-    const new_saturation = Math.max(20, Math.min(90, saturation + sat_variation));
-    const new_lightness = Math.max(40, Math.min(70, lightness + light_variation));
+    const new_saturation = Math.max(20, Math.min(60, saturation + sat_variation));
+    const new_lightness = Math.max(70, Math.min(80, lightness + light_variation));
 
     const s = new_saturation / 100;
     const l = new_lightness / 100;

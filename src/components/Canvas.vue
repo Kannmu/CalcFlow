@@ -15,39 +15,42 @@ function deleteNode(id) {
 </script>
 
 <template>
-  <button class="add-node-button" @click="addNode">Add Node</button>
-  <div class="node-container">
-    <Node v-for="node in nodes" :key="node.id" :header="node.header" @delete="deleteNode(node.id)" />
+  <div class="canvas-container">
+    <button class="add-node-button" @click="addNode">Add Node</button>
+    <div class="node-container">
+      <Node v-for="node in nodes" :key="node.id" :header="node.header" @delete="deleteNode(node.id)" />
+    </div>
   </div>
 </template>
 
 <style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
+.canvas-container {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
 }
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
+
 .node-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 10px;
   gap: 10px;
+  flex: 1;
 }
+
 .add-node-button {
   background-color: #ffffff;
   color: #000000;
-  border: 2px solid #000000;
+  border: 3px solid #000000;
   border-radius: 8px;
   padding: 5px 10px;
   cursor: pointer;
   font-size: 16px;
   font-weight: bold;
+  align-self: stretch;
+  min-height: fit-content;
 }
+
 .add-node-button:hover {
   background-color: #f0f0f0;
 }
