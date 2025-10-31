@@ -180,7 +180,7 @@ export function generateRandomColor(str, saturation, lightness) {
         hash |= 0;
     }
 
-    const hue = Math.abs(hash) % 360;
+    const hue = 60 + Math.abs(hash) % 180;
 
     const sat_variation = (Math.abs(hash) >> 8) % 21 - 10;
     const light_variation = (Math.abs(hash) >> 16) % 31 - 15;

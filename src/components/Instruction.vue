@@ -40,10 +40,15 @@ defineExpose({ togglePanel })
           <li>Subtraction: <code>-</code></li>
           <li>Multiplication: <code>*</code></li>
           <li>Division: <code>/</code></li>
+          <li>Exponentiation: <code>^</code></li>
+          <li>Modulo: <code>%</code></li>
           <li><LatexRenderer latex="x^y" displayMode="false"></LatexRenderer> <code>pow(x,y)</code></li>
           <li><LatexRenderer latex="\sin(x)" displayMode="false"></LatexRenderer> <code>sin(x)</code></li>
           <li><LatexRenderer latex="\cos(x)" displayMode="false"></LatexRenderer> <code>cos(x)</code></li>
           <li><LatexRenderer latex="\tan(x)" displayMode="false"></LatexRenderer> <code>tan(x)</code></li>
+          <li><LatexRenderer latex="\arcsin(x)" displayMode="false"></LatexRenderer> <code>asin(x)</code></li>
+          <li><LatexRenderer latex="\arccos(x)" displayMode="false"></LatexRenderer> <code>acos(x)</code></li>
+          <li><LatexRenderer latex="\arctan(x)" displayMode="false"></LatexRenderer> <code>atan(x)</code></li>
           <li><LatexRenderer latex="\sqrt{x}" displayMode="false"></LatexRenderer> <code>sqrt(x)</code></li>
           <li><LatexRenderer latex="\log_{y}(x)" displayMode="false"></LatexRenderer> <code>log(x,y)</code></li>
           <li><LatexRenderer latex="\ln(x)" displayMode="false"></LatexRenderer> <code>ln(x)</code></li>
