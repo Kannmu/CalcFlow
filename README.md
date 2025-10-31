@@ -1,60 +1,116 @@
 # CalcFlow
 
-A dynamic and interactive node-based calculator built with Vue.js. CalcFlow allows you to create complex calculations by linking nodes together, with automatic updates for dependent calculations.
+Dynamic node-based calculator for composable math expressions, built with Vue.js. Create multiple calculation nodes, write expressions, reference other nodes by name, and see results update instantly with dependency tracking.
 
-## Features
+## Highlights
 
--   **Node-Based Interface**: Create and manage individual calculation nodes.
--   **Dynamic Expressions**: Each node has an expression that can include numbers, mathematical operators, and references to other nodes.
--   **Dependency Graph**: Nodes can reference the results of other nodes, creating a dependency graph.
--   **Automatic Recalculation**: Changes in a node's expression or value automatically trigger updates in all dependent nodes.
--   **Circular Dependency Detection**: Prevents infinite loops by detecting circular references between nodes.
--   **Simple and Intuitive UI**: A clean and easy-to-use interface for managing your calculations.
+- Node-based UI for building complex calculations from simple parts
+- Dependency graph with automatic recalculation of downstream nodes
+- Circular dependency and self-reference detection with clear messages
+- Syntax highlighting and LaTeX rendering of "expression = result" via KaTeX
+- Smart autocomplete for functions, constants, and node names
+- Workspace persistence to `localStorage`, plus JSON export/import
+- Robust evaluation combining `mathjs` with a custom expression engine
+- Clean keyboard workflow including parameter navigation inside functions
 
 ## Tech Stack
 
--   **Vue.js 3**: The core framework used for building the user interface.
--   **Vite**: The build tool for a fast development experience.
+- Vue.js 3
+- Vite
+- KaTeX for LaTeX rendering
+- mathjs plus a custom parser/evaluator for reliability and readability
 
-## Getting Started
+## Installation
 
-Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes.
+### Requirements
 
-### Prerequisites
+- Node.js 18 or later
+- npm
 
--   Node.js (v18.x or higher)
--   npm
+### Setup
 
-### Installation
+1. Clone the repository:
+   ```sh
+   git clone https://github.com/Kannmu/CalcFlow.git
+   ```
+2. Navigate to the project directory:
+   ```sh
+   cd CalcFlow
+   ```
+3. Install dependencies:
+   ```sh
+   npm install
+   ```
 
-1.  Clone the repository:
-    ```sh
-    git clone https://github.com/Kannmu/CalcFlow.git
-    ```
-2.  Navigate to the project directory:
-    ```sh
-    cd CalcFlow
-    ```
-3.  Install the dependencies:
-    ```sh
-    npm install
-    ```
+## Development & Build
 
-### Running the Application
+- Start the dev server:
+  ```sh
+  npm run dev
+  ```
+  Default address: `http://localhost:5173`
 
-To start the development server, run the following command:
+- Build for production:
+  ```sh
+  npm run build
+  ```
 
-```sh
-npm run dev
-```
+- Preview the production build:
+  ```sh
+  npm run preview
+  ```
 
-This will start the application on a local server, usually at `http://localhost:5173`.
+## Usage
 
-## How to Use
+- Add a node: click the `Add Node` button
+- Rename a node: click the result header and edit (e.g., rename `Node1` to `R`)
+- Write an expression: type math like `2 + 3 * 4`
+- Reference other nodes: use their header name (e.g., `R / 5`)
+- View results: right-side result updates in real time; top shows LaTeX for `expression = result`
+- Delete a node: click the `X` button on the node
+- Clean the workspace: use the `Clean` button in the top navigation
+- Export the workspace: click `Export` to download `calcflow_workspace.json`
+- Import a workspace: click `Import` and select a JSON file
+- See supported operators/functions: click the `Instructions` button in the top navigation
 
-1.  **Add a Node**: Click the "Add Node" button to create a new calculation node.
-2.  **Name a Node**: Each node has a header (e.g., "Node1"). You can edit this header to give it a unique name.
-3.  **Write Expressions**: In the input field of a node, you can write mathematical expressions (e.g., `10 * 2`).
-4.  **Reference Other Nodes**: To use the result of another node, simply type its header name into an expression (e.g., `Node1 / 5`).
-5.  **View Results**: The result of the expression is calculated and displayed in real-time.
-6.  **Delete a Node**: Click the 'X' button on a node to delete it.
+## Autocomplete & Keyboard
+
+- Suggestions appear for functions, constants, and existing node names when typing letters
+- Use Arrow Up/Down to navigate; press `Enter` or `Tab` to apply the selection
+- Inside function parentheses, press `Tab` to jump between the argument comma and the closing parenthesis
+- Press `Escape` to close the suggestions
+
+## Supported Math
+
+- Operators: `+`, `-`, `*`, `/`, `%`, `^` (exponentiation is right-associative)
+- Constant: `pi`
+- Functions:
+  - Single-argument: `sin(x)`, `cos(x)`, `tan(x)`, `asin(x)`, `acos(x)`, `atan(x)`, `ln(x)`, `sqrt(x)`
+  - Two-argument: `pow(x, y)`, `log(x, y)` (logarithm base `y`)
+
+## Numbers & Errors
+
+- Results are rounded to 6 decimal places
+- Long integers or many decimal digits are shown in scientific notation with 4 significant digits
+- Invalid operations show `Error` (e.g., division by 0; negative input to `sqrt`; invalid params to `log`; nonpositive input to `ln`)
+- Circular dependencies show `Circular Dependency`; self-references show `Self Reference`
+
+## Examples
+
+- `2 + 3 * 4`
+- `pow(2, 10)`
+- `log(8, 2)`
+- `sqrt(3^2 + 4^2)`
+- `R / 5` (assuming a node named `R` exists)
+
+## Directory Overview
+
+- `src/components/`: nodes, UI elements, canvas, LaTeX renderer, instruction panel
+- `src/composables/`: autocomplete, highlighter, node calculation logic
+- `src/math/`: expression parsing/evaluation and the math registry (operators, functions, constants)
+- `src/utils.js`: node manager and common utilities
+- `public/`: static assets
+
+## License
+
+No license specified yet. Add one to the repo if needed and update this section.
