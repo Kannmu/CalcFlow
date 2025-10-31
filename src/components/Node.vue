@@ -39,8 +39,17 @@ function decodeElements(expression) {
 
         if (isDigit(c) || (c === '.' && i + 1 < expr.length && isDigit(expr[i + 1]))) {
             const start = i;
+            let hasDot = c === '.';
             i++;
-            while (i < expr.length && (isDigit(expr[i]) || expr[i] === '.')) i++;
+            while (i < expr.length) {
+                const ch = expr[i];
+                if (isDigit(ch)) { i++; continue; }
+                if (ch === '.') {
+                    if (hasDot) break;
+                    hasDot = true; i++; continue;
+                }
+                break;
+            }
             const value = expr.slice(start, i);
             tokens.push({ type: 'number', value });
             continue;
@@ -384,7 +393,7 @@ function evaluate(tokens) {
 }
 
 function updateDependencies() {
-    const tokens = decodeElements(expression.value);
+    const tokens = decodedElements.value;
     const newDependencies = new Set();
 
     for (const token of tokens) {
@@ -446,7 +455,7 @@ function recalculate() {
         return;
     }
     
-    const tokens = decodeElements(expression.value);
+    const tokens = decodedElements.value;
     const calculatedResult = evaluate(tokens);
     if (calculatedResult === 'Error' || isNaN(calculatedResult)) {
         result.value = "Error";
@@ -509,7 +518,7 @@ onUnmounted(() => {
                         
                         <Element :key="element.value" :header="element.value" 
                         :content="nodeManager.getNodeByHeader(element.value)?.result || 0" 
-                        :isRef="true" :isResult="false" @update:content="onElementUpdate(index, $event)" />
+                        :isRef="true" :isResult="false" :isMissing="!nodeManager.getNodeByHeader(element.value)" @update:content="onElementUpdate(index, $event)" />
 
                     </span>
                     <span v-else-if="element.type === 'function'" class="node-elements-function">
@@ -544,7 +553,7 @@ onUnmounted(() => {
         </div>
 
         <div class="node-expression">
-            <input class="node-expression-input" v-model="expression" @change="cleanExpression" />
+            <input class="node-expression-input" v-model="expression" @change="cleanExpression" placeholder="Enter expression here" />
         </div>
 
     </div>

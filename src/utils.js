@@ -140,18 +140,31 @@ class NodeManager {
     }
 
     triggerDependentUpdates(nodeId) {
-        const dependents = this.getDependents(nodeId)
+        const visited = new Set()
+        const stack = [nodeId]
+        while (stack.length) {
+            const curr = stack.pop()
+            const deps = this.dependencyGraph.get(curr) || new Set()
+            for (const d of deps) {
+                if (!visited.has(d)) {
+                    visited.add(d)
+                    stack.push(d)
+                }
+            }
+        }
+        visited.delete(nodeId)
+        const closure = Array.from(visited)
+        const order = this.getTopologicalOrder()
+        const sorted = closure.sort((a, b) => order.indexOf(a) - order.indexOf(b))
         const updateCallbacks = []
-
-        dependents.forEach(dependentId => {
-            const node = this.getNode(dependentId)
+        sorted.forEach(id => {
+            const node = this.getNode(id)
             if (node && node.updateCallback) {
                 updateCallbacks.push(() => node.updateCallback())
             }
         })
-
         Promise.resolve().then(() => {
-            updateCallbacks.forEach(callback => callback())
+            updateCallbacks.forEach(fn => fn())
         })
     }
 }

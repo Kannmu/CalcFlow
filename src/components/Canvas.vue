@@ -55,6 +55,15 @@ onUnmounted(() => {
   <div class="canvas-container">
     <button ref="addButtonRef" class="add-node-button" @click="addNode">Add Node</button>
     <div ref="nodeContainerRef" class="node-container">
+      <div class="quick-start" v-if="nodes.length <= 2">
+        <h3 class="quick-start-title">Quick Start</h3>
+        <ul class="quick-start-list">
+          <li>Add a node and enter a math expression</li>
+          <li>Name the result; use this name in other nodes</li>
+          <li>Reference other nodes by their header (e.g., Node1 / 5)</li>
+          <li>Click the Instruction button for available operators</li>
+        </ul>
+      </div>
       <Node v-for="node in nodes" :key="node.id" :header="node.header" @delete="deleteNode(node.id)" />
     </div>
   </div>
@@ -88,5 +97,32 @@ onUnmounted(() => {
 
 .add-node-button:hover {
   background-color: #f0f0f0;
+}
+
+.quick-start {
+  background: #ffffff;
+  border: 3px solid #000000;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.quick-start-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #000000;
+  margin: 0 0 6px 0;
+}
+
+.quick-start-list {
+  list-style: disc;
+  padding-left: 16px;
+  margin: 0;
+  color: #000000;
+}
+
+.quick-start-list li {
+  font-size: 14px;
+  margin: 4px 0;
 }
 </style>

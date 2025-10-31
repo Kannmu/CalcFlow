@@ -9,6 +9,7 @@ const props = defineProps({
     content: [String, Number],
     isRef: Boolean,
     isResult: Boolean,
+    isMissing: Boolean,
 })
 
 
@@ -18,15 +19,17 @@ const editableHeader = ref(header.value)
 const headerInputRef = ref(null)
 const contentInputRef = ref(null)
 
+let __measureCanvas = null
+let __measureContext = null
 const adjustInputWidth = (inputElement, value) => {
     if (!inputElement) return
-    
-    const canvas = document.createElement('canvas')
-    const context = canvas.getContext('2d')
+    if (!__measureCanvas) {
+        __measureCanvas = document.createElement('canvas')
+        __measureContext = __measureCanvas.getContext('2d')
+    }
     const computedStyle = window.getComputedStyle(inputElement)
-    context.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`
-    
-    const textWidth = context.measureText(value || '').width
+    __measureContext.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`
+    const textWidth = __measureContext.measureText(value || '').width
     const minWidth = Math.max(textWidth + 20, 30)
     inputElement.style.width = `${minWidth}px`
 }
@@ -61,7 +64,7 @@ const editableContent = computed({
             const integerPartLength = Math.trunc(absValue).toString().length
             const decimalPart = s.split('.')[1]
             if (integerPartLength > 6 || (decimalPart && decimalPart.length > 3)) {
-                return content.toExponential(6)
+                return content.toExponential(4)
             }
         }
         return internalContent.value
@@ -90,7 +93,7 @@ const editableContent = computed({
     },
 })
 
-const elementBackgroundColor = computed(() => generateRandomColor(editableHeader.value + internalContent.value, 30, 70))
+const elementBackgroundColor = computed(() => generateRandomColor(editableHeader.value + String(internalContent.value), 30, 70))
 
 const showMenu = ref(false)
 const menuPosition = ref({ x: 0, y: 0 })
@@ -130,7 +133,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="element" :style="{ backgroundColor: elementBackgroundColor }">
+    <div class="element" :class="{ missing: props.isMissing }" :style="{ backgroundColor: elementBackgroundColor }">
         <div class="element-header">
             <div v-if="isRef" class="element-header-display">{{ editableHeader }}</div>
             <input v-else ref="headerInputRef" class="element-header-input" v-model="editableHeader" />
@@ -156,7 +159,14 @@ onUnmounted(() => {
     align-items: center;
     width: auto;
     min-width: fit-content;
+    height: auto;
+    min-height: fit-content;
     border-radius: 8px;
+}
+
+.element.missing {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
 .element-header {
