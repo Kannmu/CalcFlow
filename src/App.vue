@@ -110,6 +110,15 @@ function onImportFile(e) {
 
     <footer class="app-footer">
       <div class="footer-content">
+        <div class="footer-shortcuts">
+          <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 添加节点
+          <span class="shortcut-divider">|</span>
+          <kbd>Ctrl</kbd>+<kbd>D</kbd> 复制节点
+          <span class="shortcut-divider">|</span>
+          <kbd>Escape</kbd> 取消
+          <span class="shortcut-divider">|</span>
+          拖拽排序节点
+        </div>
         <p class="footer-text">
           Created by <a href="https://kannmu.top/" target="_blank" rel="noopener noreferrer" class="footer-link">Kannmu</a>
         </p>
@@ -251,6 +260,34 @@ function onImportFile(e) {
 
 .footer-link:hover {
   color: #1e293b;
+}
+
+.footer-shortcuts {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.footer-shortcuts kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-family: ui-monospace, monospace;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+  color: #475569;
+}
+
+.shortcut-divider {
+  color: #cbd5e1;
+  margin: 0 4px;
 }
 
 @media (max-width: 768px) {

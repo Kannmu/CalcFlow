@@ -17,6 +17,13 @@ class NodeManager {
         if (!this.reverseDependencyGraph.has(nodeId)) {
             this.reverseDependencyGraph.set(nodeId, new Set())
         }
+        // 当新节点注册时，触发所有现有节点同步更新依赖
+        // 这样引用新节点的节点可以立即建立依赖关系
+        this.nodes.forEach((node, id) => {
+            if (id !== nodeId && node.onNewNodeRegistered) {
+                node.onNewNodeRegistered()
+            }
+        })
     }
 
     unregisterNode(nodeId) {
@@ -44,7 +51,25 @@ class NodeManager {
 
     updateNode(nodeId, nodeData) {
         if (this.nodes.has(nodeId)) {
-            this.nodes.set(nodeId, { ...this.nodes.get(nodeId), ...nodeData })
+            const oldNode = this.nodes.get(nodeId)
+            const oldHeader = oldNode.header
+            this.nodes.set(nodeId, { ...oldNode, ...nodeData })
+            // 如果header改变了，触发所有节点重新计算
+            // 这样引用新header的节点可以建立依赖关系
+            if (nodeData.header !== undefined && nodeData.header !== oldHeader) {
+                this.nodes.forEach((node, id) => {
+                    if (id !== nodeId) {
+                        // 先同步更新依赖，再触发重新计算
+                        if (node.onNewNodeRegistered) {
+                            node.onNewNodeRegistered()
+                        }
+                        // 触发完整重新计算以传播错误
+                        if (node.updateCallback) {
+                            node.updateCallback()
+                        }
+                    }
+                })
+            }
         }
     }
 

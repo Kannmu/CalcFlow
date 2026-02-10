@@ -1,6 +1,6 @@
 <script setup>
 import Node from './Node.vue'
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, onUnmounted } from 'vue'
 import { nodeManager } from '../utils.js'
 
 const LS_KEY = 'calcflow_workspace'
@@ -15,6 +15,85 @@ function addNode() {
 function deleteNode(id) {
   nodes.value = nodes.value.filter(node => node.id !== id)
 }
+
+// Drag and drop state
+const draggedNodeIndex = ref(-1)
+const dragOverNodeIndex = ref(-1)
+
+function onDragStart(index) {
+  draggedNodeIndex.value = index
+}
+
+function onDragOver(index) {
+  if (draggedNodeIndex.value === -1 || draggedNodeIndex.value === index) return
+  dragOverNodeIndex.value = index
+}
+
+function onDragLeave() {
+  dragOverNodeIndex.value = -1
+}
+
+function onDrop(targetIndex) {
+  if (draggedNodeIndex.value === -1 || draggedNodeIndex.value === targetIndex) {
+    draggedNodeIndex.value = -1
+    dragOverNodeIndex.value = -1
+    return
+  }
+
+  // Reorder nodes
+  const draggedNode = nodes.value[draggedNodeIndex.value]
+  nodes.value.splice(draggedNodeIndex.value, 1)
+  nodes.value.splice(targetIndex, 0, draggedNode)
+
+  draggedNodeIndex.value = -1
+  dragOverNodeIndex.value = -1
+}
+
+function onDragEnd() {
+  draggedNodeIndex.value = -1
+  dragOverNodeIndex.value = -1
+}
+
+// Keyboard shortcuts
+const copiedNode = ref(null)
+
+function handleKeyDown(e) {
+  // Ctrl/Cmd + Enter: Add new node
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault()
+    addNode()
+    return
+  }
+
+  // Ctrl/Cmd + D: Duplicate last node (if expression exists)
+  if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+    e.preventDefault()
+    if (nodes.value.length > 0) {
+      const lastNode = nodes.value[nodes.value.length - 1]
+      nodes.value.push({
+        id: nextNodeId++,
+        header: `Node${nextNodeId - 1}`,
+        expression: lastNode.expression
+      })
+    }
+    return
+  }
+
+  // Escape: Clear drag state
+  if (e.key === 'Escape') {
+    draggedNodeIndex.value = -1
+    dragOverNodeIndex.value = -1
+    return
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
 
 onMounted(() => {
   try {
@@ -76,7 +155,10 @@ defineExpose({ loadWorkspaceFromArray, clearAllNodes })
           <li>Click the Instruction button for all available operators and functions</li>
         </ul>
       </div>
-      <Node v-for="node in nodes" :key="node.id" :header="node.header" :initialExpression="node.expression" @delete="deleteNode(node.id)" />
+      <Node v-for="(node, index) in nodes" :key="node.id" :header="node.header" :initialExpression="node.expression" @delete="deleteNode(node.id)" :draggable="true" :class="{
+        'dragging': draggedNodeIndex === index,
+        'drag-over': dragOverNodeIndex === index
+      }" @dragstart="onDragStart(index)" @dragover.prevent="onDragOver(index)" @dragleave="onDragLeave" @drop.prevent="onDrop(index)" @dragend="onDragEnd" />
     </div>
   </div>
 </template>
@@ -152,5 +234,26 @@ defineExpose({ loadWorkspaceFromArray, clearAllNodes })
   padding: 0.25rem 0.5rem;
   border-radius: 0.5rem;
   font-weight: 600;
+}
+
+.node-container :deep(.node.dragging) {
+  opacity: 0.4;
+  transform: scale(0.98);
+}
+
+.node-container :deep(.node.drag-over) {
+  position: relative;
+}
+
+.node-container :deep(.node.drag-over::after) {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #3b82f6;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
 }
 </style>

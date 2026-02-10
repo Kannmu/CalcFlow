@@ -17,6 +17,11 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
         if (referencedNode) {
           if (referencedNode.nodeId === nodeId.value) {
             result.value = 'Self Reference'
+            // 同步更新nodeManager
+            nodeManager.updateNode(nodeId.value, {
+              result: result.value,
+              header: editableHeader.value,
+            })
             currentDependencies.value.forEach(depNodeId => {
               nodeManager.removeDependency(nodeId.value, depNodeId)
             })
@@ -35,10 +40,13 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
     })
     if (nodeManager.detectCircularDependency(nodeId.value)) {
       result.value = 'Circular Dependency'
-      newDependencies.forEach(depNodeId => {
-        nodeManager.removeDependency(nodeId.value, depNodeId)
+      // 同步更新nodeManager，避免Vue watch的异步延迟
+      nodeManager.updateNode(nodeId.value, {
+        result: result.value,
+        header: editableHeader.value,
       })
-      currentDependencies.value.clear()
+      // 不清除依赖关系，让错误状态在循环中传播
+      currentDependencies.value = newDependencies
       return false
     }
     currentDependencies.value = newDependencies
@@ -47,13 +55,19 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
 
   async function recalculate() {
     const dependenciesUpdated = updateDependencies()
-    if (!dependenciesUpdated) return
     const currentExpressionWithDeps = expression.value + JSON.stringify(
       Array.from(currentDependencies.value).map(depId => {
         const depNode = nodeManager.getNode(depId)
         return depNode ? depNode.result : 0
       })
     )
+    if (!dependenciesUpdated) {
+      // 即使依赖更新失败（如循环依赖），也触发依赖节点更新，让错误状态传播
+      // 更新lastExpression以防止缓存过期值
+      lastExpression.value = currentExpressionWithDeps
+      nodeManager.triggerDependentUpdates(nodeId.value)
+      return
+    }
     if (lastExpression.value === currentExpressionWithDeps && lastResult.value !== null) {
       result.value = lastResult.value
       return
@@ -63,6 +77,18 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
     for (const token of tokens) {
       if (token.type === 'reference') {
         const n = nodeManager.getNodeByHeader(token.value)
+        if (n && (n.result === 'Circular Dependency' || n.result === 'Self Reference' || n.result === 'Error')) {
+          // 传播依赖节点的错误状态
+          result.value = n.result
+          lastExpression.value = currentExpressionWithDeps
+          lastResult.value = result.value
+          nodeManager.updateNode(nodeId.value, {
+            result: result.value,
+            header: editableHeader.value,
+          })
+          nodeManager.triggerDependentUpdates(nodeId.value)
+          return
+        }
         scope[token.value] = n ? n.result : 0
       }
     }
@@ -85,7 +111,13 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
     if (recalculateTimer) clearTimeout(recalculateTimer)
     recalculateTimer = setTimeout(() => {
       recalculate()
-    }, 50)
+    }, 100)
+  }
+
+  // 用于新节点注册时同步更新依赖
+  function onNewNodeRegistered() {
+    // 立即同步更新依赖关系，不延迟
+    updateDependencies()
   }
 
   return {
@@ -93,6 +125,7 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
     updateDependencies,
     recalculate,
     debouncedRecalculate,
+    onNewNodeRegistered,
     lastExpression,
     lastResult,
   }

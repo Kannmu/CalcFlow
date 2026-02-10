@@ -32,6 +32,8 @@ export class NodePage {
     await input.click()
     await input.fill(value)
     await input.blur()
+    // 等待防抖计算完成 (debouncedRecalculate 使用 100ms)
+    await this.page.waitForTimeout(200)
   }
 
   async expectResult(index: number, value: string | number) {

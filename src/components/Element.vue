@@ -97,12 +97,37 @@ const elementBackgroundColor = computed(() => generateRandomColor(editableHeader
 
 const showMenu = ref(false)
 const menuPosition = ref({ x: 0, y: 0 })
+const elementRef = ref(null)
 
 const openMenu = (event) => {
     if (!props.isResult) return
     event.preventDefault()
+
+    // Calculate position relative to the element
+    const rect = elementRef.value?.getBoundingClientRect()
+    if (rect) {
+        const menuWidth = 100
+        const menuHeight = 40
+        let x = rect.left + rect.width / 2 - menuWidth / 2
+        let y = rect.bottom + 8
+
+        // Adjust if menu would go off screen
+        if (x + menuWidth > window.innerWidth) {
+            x = window.innerWidth - menuWidth - 10
+        }
+        if (x < 10) {
+            x = 10
+        }
+        if (y + menuHeight > window.innerHeight) {
+            y = rect.top - menuHeight - 8
+        }
+
+        menuPosition.value = { x, y }
+    } else {
+        menuPosition.value = { x: event.clientX, y: event.clientY }
+    }
+
     showMenu.value = true
-    menuPosition.value = { x: event.clientX, y: event.clientY }
     document.addEventListener('click', handleClickOutside, true)
 }
 
@@ -133,7 +158,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="element" :class="{ missing: props.isMissing }" :style="{ backgroundColor: elementBackgroundColor }">
+    <div ref="elementRef" class="element" :class="{ missing: props.isMissing }" :style="{ backgroundColor: elementBackgroundColor }">
         <div class="element-header">
             <div v-if="isRef" class="element-header-display">{{ editableHeader }}</div>
             <input v-else ref="headerInputRef" class="element-header-input" v-model="editableHeader" />
@@ -153,7 +178,7 @@ onUnmounted(() => {
 .element {
     border: 2px solid #000000;
     background-color: #ffffff;
-    padding: 5px;
+    padding: 6px 8px;
     display: inline-flex;
     flex-direction: column;
     align-items: center;
@@ -161,12 +186,25 @@ onUnmounted(() => {
     min-width: fit-content;
     height: auto;
     min-height: fit-content;
-    border-radius: 8px;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.element:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
 }
 
 .element.missing {
     border-color: #ef4444;
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+    animation: missingPulse 2s ease-in-out infinite;
+}
+
+@keyframes missingPulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15); }
+    50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.08); }
 }
 
 .element-header {
@@ -204,9 +242,9 @@ onUnmounted(() => {
 }
 
 .element-header-input:focus {
-    border: 2px;
-    background-color: rgba(255, 255, 255, 0.5);
-    outline: 1px solid #ffffff;
+    background-color: rgba(255, 255, 255, 0.8);
+    outline: 2px solid #3b82f6;
+    border-radius: 4px;
 }
 
 .element-header-line {
@@ -241,28 +279,31 @@ onUnmounted(() => {
 }
 
 .element-content-input:focus {
-    border: 2px;
-    background-color: rgba(255, 255, 255, 0.5);
-    outline: 1px solid #ffffff;
+    background-color: rgba(255, 255, 255, 0.8);
+    outline: 2px solid #3b82f6;
+    border-radius: 4px;
 }
 
 .context-menu {
     position: fixed;
-    background-color: rgb(255, 255, 255);
-    border: 1px solid #848484;
-    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.15);
-    border-radius: 12px;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    border-radius: 10px;
     z-index: 1000;
+    min-width: 100px;
+    overflow: hidden;
 }
 
 .context-menu-item {
-    padding: 8px 12px;
+    padding: 10px 16px;
     cursor: pointer;
-    color: #000000;
+    color: #1e293b;
+    font-weight: 500;
+    transition: background-color 0.15s ease;
 }
 
 .context-menu-item:hover {
-    background-color: #c3c3c3;
-    border-radius: 12px;
+    background-color: #f1f5f9;
 }
 </style>

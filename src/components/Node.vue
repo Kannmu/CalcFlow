@@ -43,6 +43,13 @@ const isError = computed(() => {
     return result.value === 'Error' || result.value === 'Circular Dependency' || result.value === 'Self Reference'
 })
 
+const errorMessage = computed(() => {
+    if (result.value === 'Circular Dependency') return '循环依赖：节点间形成了相互引用'
+    if (result.value === 'Self Reference') return '自引用：节点不能引用自身'
+    if (result.value === 'Error') return '表达式错误：请检查输入'
+    return ''
+})
+
 function decodeElements(expression) {
     return decodeElementsEngine(expression)
 }
@@ -71,7 +78,7 @@ function cleanExpression() {
     expression.value = expression.value.trim().replace(/^[\s+\-*\/\^%]+|[\s+\-*\/\^%]+$/g, '');
 }
 
-const { debouncedRecalculate } = useNodeCalculation({
+const { debouncedRecalculate, onNewNodeRegistered } = useNodeCalculation({
     expression,
     editableHeader,
     nodeId,
@@ -103,7 +110,8 @@ onMounted(() => {
     nodeManager.registerNode(nodeId.value, {
         header: editableHeader.value,
         result: result.value,
-        updateCallback: debouncedRecalculate
+        updateCallback: debouncedRecalculate,
+        onNewNodeRegistered: onNewNodeRegistered
     });
 });
 
@@ -116,7 +124,7 @@ onUnmounted(() => {
 <template>
     <div class="node" data-testid="node" :class="{ error: isError }" :style="{ backgroundColor: elementBackgroundColor }">
         <button class="delete-button" data-testid="node-delete" @click="$emit('delete')">X</button>
-        <div v-if="isError" class="node-error-badge" data-testid="node-error">⚠️</div>
+        <div v-if="isError" class="node-error-badge" data-testid="node-error" :title="errorMessage">⚠️</div>
         <div class="node-latex">
             <LatexRenderer :latex="latexExpression" />
         </div>
@@ -182,58 +190,83 @@ onUnmounted(() => {
 .node {
     position: relative;
     border: 3px solid #000000;
-    background-color: #595959;
-    padding: 5px;
+    background-color: #f8f9fa;
+    padding: 8px;
     display: flex;
     flex-direction: column;
     align-items: center;
     min-width: 80px;
-    border-radius: 8px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.node:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    transform: translateY(-1px);
 }
 
 .node.error {
     border-color: #ef4444;
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15), 0 4px 16px rgba(239, 68, 68, 0.1);
+    animation: errorPulse 2s ease-in-out infinite;
+}
+
+@keyframes errorPulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15), 0 4px 16px rgba(239, 68, 68, 0.1); }
+    50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.1), 0 4px 20px rgba(239, 68, 68, 0.15); }
 }
 
 .delete-button {
     position: absolute;
-    top: -15px;
-    right: -20px;
-    background: rgb(253, 186, 186);
-    color: rgb(0, 0, 0);
-    border: 2px solid #000000;
+    top: 6px;
+    right: 6px;
+    background: #fee2e2;
+    color: #dc2626;
+    border: 2px solid #dc2626;
     border-radius: 50%;
-    width: 30px;
-    height: 30px;
+    width: 24px;
+    height: 24px;
     cursor: pointer;
     font-weight: bold;
-    font-size: 18px;
+    font-size: 14px;
     display: flex;
     justify-content: center;
     align-items: center;
     padding: 0;
     line-height: 1;
+    opacity: 0;
+    transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+}
+
+.node:hover .delete-button {
+    opacity: 1;
+}
+
+.delete-button:hover {
+    background: #fecaca;
+    transform: scale(1.1);
 }
 
 .node-error-badge {
     position: absolute;
-    top: -12px;
-    left: -12px;
-    background: #ff6e6e;
-    color: #ffffff;
-    border: 2px solid #000000;
+    top: 6px;
+    left: 6px;
+    background: #fee2e2;
+    color: #dc2626;
+    border: 2px solid #dc2626;
     border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    cursor: default;
+    width: 22px;
+    height: 22px;
+    cursor: help;
     font-weight: bold;
-    font-size: 18px;
+    font-size: 12px;
     display: flex;
     justify-content: center;
     align-items: center;
     padding: 0;
     line-height: 1;
+    z-index: 10;
 }
 
 .node-elements {
@@ -292,20 +325,20 @@ onUnmounted(() => {
 
 .node-expression {
     color: #000000;
-    margin-top: 5px;
+    margin-top: 8px;
     font-size: 16px;
     font-weight: bold;
     border: none;
     text-align: center;
-    padding: 5px 0;
+    padding: 6px 0;
     width: 100%;
     background-color: transparent;
 }
 
 .node-expression:focus {
-    background-color: rgba(255, 255, 255, 0.5);
-    outline: 1px solid #ffffff;
-    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.8);
+    outline: 2px solid #3b82f6;
+    border-radius: 6px;
 }
 .expression-container {
     position: relative;
@@ -318,10 +351,10 @@ onUnmounted(() => {
     right: 0;
     bottom: 0;
     pointer-events: none;
-    background-color: rgba(255, 255, 255, 0.5);
+    background-color: rgba(255, 255, 255, 0.7);
     color: #000000;
-    border-radius: 4px;
-    padding: 5px 0;
+    border-radius: 6px;
+    padding: 6px 8px;
     font-size: 16px;
     font-weight: bold;
     white-space: pre;
@@ -332,19 +365,18 @@ onUnmounted(() => {
     background-color: transparent;
     color: transparent;
     caret-color: #000000;
-    margin-top: 5px;
+    margin-top: 6px;
     font-size: 16px;
     font-weight: bold;
     border: none;
     text-align: center;
-    padding: 5px 0;
+    padding: 6px 8px;
     width: 100%;
-    border-radius: 4px;
+    border-radius: 6px;
 }
 .node-expression-input:focus {
-    border: 2px;
     background-color: transparent;
-    outline: 1px solid #ffffff;
+    outline: 2px solid #3b82f6;
 }
 .node-latex {
     margin-bottom: 6px;
@@ -362,32 +394,42 @@ onUnmounted(() => {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    top: 100%;
+    top: calc(100% + 4px);
     background: #ffffff;
-    border: 1px solid #000000;
-    border-radius: 8px;
-    padding: 4px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 6px;
     z-index: 1001;
-    max-height: 180px;
+    max-height: 200px;
     overflow-y: auto;
-    min-width: 200px;
+    min-width: 220px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
 }
 .autocomplete-item {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
-    padding: 6px 8px;
+    padding: 8px 12px;
     cursor: pointer;
     color: #000000;
+    border-radius: 6px;
+    transition: background-color 0.15s ease;
 }
+.autocomplete-item:hover,
 .autocomplete-item.active {
-    background: #f0f0f0;
+    background: #f1f5f9;
 }
 .autocomplete-type {
-    font-size: 12px;
+    font-size: 11px;
     color: #64748b;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 2px 6px;
+    background: #e2e8f0;
+    border-radius: 4px;
 }
 .autocomplete-label {
     font-weight: 600;
+    color: #1e293b;
 }
 </style>
