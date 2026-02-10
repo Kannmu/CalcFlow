@@ -1,7 +1,13 @@
 <script setup>
 import { ref, onMounted, watch, nextTick } from 'vue'
 import katex from 'katex'
-import 'katex/dist/katex.min.css'
+
+let katexCssLoaded = false
+async function ensureKatexCss() {
+  if (katexCssLoaded) return
+  await import('katex/dist/katex.min.css')
+  katexCssLoaded = true
+}
 
 const props = defineProps({
   latex: {
@@ -18,8 +24,9 @@ const latexElement = ref(null)
 
 const renderLaTeX = async () => {
   if (!latexElement.value) return
-  
+
   try {
+    await ensureKatexCss()
     katex.render(props.latex, latexElement.value, {
       displayMode: props.displayMode,
       throwOnError: false,
@@ -46,7 +53,7 @@ watch(() => props.latex, () => {
 </script>
 
 <template>
-  <div ref="latexElement" class="latex-container"></div>
+  <div ref="latexElement" class="latex-container" data-testid="latex-container"></div>
 </template>
 
 <style scoped>

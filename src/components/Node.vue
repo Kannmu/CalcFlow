@@ -53,9 +53,11 @@ const decodedElements = computed(() => decodeElements(expression.value));
 
 const { highlightedInputHtml } = useHighlighter(expression)
 
-const latexExpression = computed(() => {
-    return latexFromExpression(expression.value, result.value)
-})
+const latexExpression = ref('')
+
+async function updateLatexExpression() {
+    latexExpression.value = await latexFromExpression(expression.value, result.value)
+}
 
 function onElementUpdate(index, newValue) {
     const tokens = decodedElements.value.map(t => ({ ...t }));
@@ -78,7 +80,12 @@ const { debouncedRecalculate } = useNodeCalculation({
 
 watch(expression, () => {
     debouncedRecalculate();
+    updateLatexExpression()
 }, { immediate: true });
+
+watch(result, () => {
+    updateLatexExpression()
+})
 
 watch(expression, (val) => {
     nodeManager.updateNode(nodeId.value, { expression: val })
@@ -92,6 +99,7 @@ onMounted(() => {
     if (typeof props.initialExpression === 'string') {
         expression.value = props.initialExpression
     }
+    updateLatexExpression()
     nodeManager.registerNode(nodeId.value, {
         header: editableHeader.value,
         result: result.value,
@@ -106,9 +114,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="node" :class="{ error: isError }" :style="{ backgroundColor: elementBackgroundColor }">
-        <button class="delete-button" @click="$emit('delete')">X</button>
-        <div v-if="isError" class="node-error-badge">⚠️</div>
+    <div class="node" data-testid="node" :class="{ error: isError }" :style="{ backgroundColor: elementBackgroundColor }">
+        <button class="delete-button" data-testid="node-delete" @click="$emit('delete')">X</button>
+        <div v-if="isError" class="node-error-badge" data-testid="node-error">⚠️</div>
         <div class="node-latex">
             <LatexRenderer :latex="latexExpression" />
         </div>
@@ -156,7 +164,7 @@ onUnmounted(() => {
         <div class="node-expression">
             <div class="expression-container">
                 <div class="expression-highlighter" v-html="highlightedInputHtml"></div>
-                <input ref="expressionInputRef" class="node-expression-input" v-model="expression" @input="onExpressionInput" @keydown="onExpressionKeydown" @focus="onExpressionFocus" @blur="onExpressionBlur" @change="cleanExpression" />
+                <input ref="expressionInputRef" class="node-expression-input" data-testid="node-expression" v-model="expression" @input="onExpressionInput" @keydown="onExpressionKeydown" @focus="onExpressionFocus" @blur="onExpressionBlur" @change="cleanExpression" />
                 <div v-if="suggestionsOpen" class="autocomplete-menu">
                     <div v-for="(item, idx) in suggestionItems" :key="item.type + ':' + item.label" class="autocomplete-item" :class="{ active: idx === selectedSuggestionIndex }" @mousedown.prevent="applySuggestionAt(idx)">
                         <span class="autocomplete-type">{{ item.type === 'function' ? 'fn' : (item.type === 'constant' ? 'const' : 'node') }}</span>

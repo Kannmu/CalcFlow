@@ -45,7 +45,7 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
     return true
   }
 
-  function recalculate() {
+  async function recalculate() {
     const dependenciesUpdated = updateDependencies()
     if (!dependenciesUpdated) return
     const currentExpressionWithDeps = expression.value + JSON.stringify(
@@ -66,7 +66,7 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
         scope[token.value] = n ? n.result : 0
       }
     }
-    const calculatedResult = evaluateExpression(expression.value, scope)
+    const calculatedResult = await evaluateExpression(expression.value, scope)
     if (calculatedResult === 'Error' || isNaN(calculatedResult)) {
       result.value = 'Error'
     } else {

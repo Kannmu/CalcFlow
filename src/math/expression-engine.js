@@ -1,5 +1,16 @@
 import { mathRegistry } from './registry.js'
-import { evaluate as mathEvaluate, parse as mathParse } from 'mathjs'
+
+let mathjsLoader = null
+let mathjsModule = null
+
+async function loadMathjs() {
+  if (mathjsModule) return mathjsModule
+  if (!mathjsLoader) {
+    mathjsLoader = import('mathjs')
+  }
+  mathjsModule = await mathjsLoader
+  return mathjsModule
+}
 
 function decodeElements(expression) {
   if (!expression) return []
@@ -321,9 +332,10 @@ function evaluateTokens(tokens, scope) {
   return isNaN(res) ? 'Error' : res
 }
 
-function evaluateExpression(expression, scope) {
+async function evaluateExpression(expression, scope) {
   try {
-    const v = mathEvaluate(String(expression || ''), scope || {})
+    const { evaluate } = await loadMathjs()
+    const v = evaluate(String(expression || ''), scope || {})
     return typeof v === 'number' && isFinite(v) ? v : (typeof v === 'bigint' ? Number(v) : NaN)
   } catch (e) {
     const tokens = decodeElements(expression)
@@ -331,9 +343,10 @@ function evaluateExpression(expression, scope) {
   }
 }
 
-function latexFromExpression(expression, result) {
+async function latexFromExpression(expression, result) {
   try {
-    const node = mathParse(String(expression || ''))
+    const { parse } = await loadMathjs()
+    const node = parse(String(expression || ''))
     const left = node ? node.toTex() : ''
     const right = formatResultLatex(result)
     return left + ' = ' + right

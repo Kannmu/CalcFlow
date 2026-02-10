@@ -64,9 +64,9 @@ defineExpose({ loadWorkspaceFromArray, clearAllNodes })
 </script>
 
 <template>
-  <div class="canvas-container" :class="{ 'canvas-gap-large': nodes.length >= 3 }">
-    <button class="add-node-button" @click="addNode">Add Node</button>
-    <div class="node-container">
+  <div class="canvas-container" data-testid="canvas" :class="{ 'canvas-gap-large': nodes.length >= 3 }">
+    <button class="add-node-button" data-testid="add-node" @click="addNode">Add Node</button>
+    <div class="node-container" data-testid="node-container">
       <div class="quick-start" v-if="nodes.length <= 2">
         <h3 class="quick-start-title">Quick Start</h3>
         <ul class="quick-start-list">

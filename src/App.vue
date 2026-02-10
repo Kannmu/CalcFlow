@@ -80,23 +80,23 @@ function onImportFile(e) {
             GitHub
           </a>
 
-          <a href="#" class="nav-link" @click.prevent="cleanWorkspace">
+          <a href="#" class="nav-link" data-testid="nav-clean" @click.prevent="cleanWorkspace">
             <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
             Clean
           </a>
 
-          <a href="#" class="nav-link" @click.prevent="exportWorkspace">
+          <a href="#" class="nav-link" data-testid="nav-export" @click.prevent="exportWorkspace">
             <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 18 12 23 17 18" transform="scale(1,-1) translate(0,-27)"/><line x1="12" y1="7" x2="12" y2="17"/></svg>
             Export
           </a>
 
-          <a href="#" class="nav-link" @click.prevent="onImportClick">
+          <a href="#" class="nav-link" data-testid="nav-import" @click.prevent="onImportClick">
             <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Import
           </a>
-          <input ref="importInputRef" type="file" accept="application/json" style="display:none" @change="onImportFile" />
+          <input ref="importInputRef" data-testid="import-file-input" type="file" accept="application/json" style="display:none" @change="onImportFile" />
           
-          <a href="#" class="nav-link" @click.prevent="instructionRef?.togglePanel()">
+          <a href="#" class="nav-link" data-testid="nav-instructions" @click.prevent="instructionRef?.togglePanel()">
             <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             Instructions
           </a>
