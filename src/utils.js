@@ -198,21 +198,34 @@ export const nodeManager = new NodeManager()
 
 export function generateRandomColor(str, saturation, lightness) {
     let hash = 0;
-    if (str.length === 0) return '#ffffff';
+    if (!str || str.length === 0) return '#f8fafc';
+
+    // Generate hash from string
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
-        hash = (hash << 5) - hash + char;
-        hash |= 0;
+        hash = ((hash << 5) - hash + char) | 0;
     }
 
-    const hue = 60 + Math.abs(hash) % 180;
+    // Use a wider range of hues but limit to pleasing pastel tones
+    // Focus on blue-green-purple range (180-300) for modern aesthetic
+    const hueRanges = [
+        { min: 180, max: 220 }, // Cyan-Blue
+        { min: 220, max: 260 }, // Blue-Purple
+        { min: 260, max: 300 }, // Purple-Magenta
+        { min: 30, max: 50 },   // Yellow-Orange
+        { min: 140, max: 170 }, // Green-Teal
+    ];
+    const rangeIndex = Math.abs(hash) % hueRanges.length;
+    const range = hueRanges[rangeIndex];
+    const hue = range.min + (Math.abs(hash >> 4) % (range.max - range.min));
 
-    const sat_variation = (Math.abs(hash) >> 8) % 21 - 10;
-    const light_variation = (Math.abs(hash) >> 16) % 31 - 15;
+    // Ensure consistent, pleasing saturation and lightness
+    // Saturation: 15-25% for subtle backgrounds
+    // Lightness: 95-97% for very light backgrounds
+    const new_saturation = 15 + (Math.abs(hash >> 8) % 10); // 15-25%
+    const new_lightness = 95 + (Math.abs(hash >> 12) % 3);  // 95-98%
 
-    const new_saturation = Math.max(20, Math.min(60, saturation + sat_variation));
-    const new_lightness = Math.max(70, Math.min(80, lightness + light_variation));
-
+    // Convert HSL to RGB
     const s = new_saturation / 100;
     const l = new_lightness / 100;
     const c = (1 - Math.abs(2 * l - 1)) * s;

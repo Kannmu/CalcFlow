@@ -2,7 +2,7 @@
 import { ref, toRefs, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { generateRandomColor } from '../utils.js'
 
-const emit = defineEmits(['update:content','update:header'])
+const emit = defineEmits(['update:content','update:header', 'copy'])
 
 const props = defineProps({
     header: String,
@@ -136,8 +136,11 @@ const handleClickOutside = (event) => {
     document.removeEventListener('click', handleClickOutside, true)
 }
 
+
+
 const copyToClipboard = () => {
     navigator.clipboard.writeText(internalContent.value)
+    emit('copy', internalContent.value)
 }
 
 onMounted(() => {
@@ -176,9 +179,9 @@ onUnmounted(() => {
 
 <style>
 .element {
-    border: 2px solid #000000;
-    background-color: #ffffff;
-    padding: 6px 8px;
+    border: 1px solid var(--color-mist);
+    background-color: var(--color-white);
+    padding: var(--space-2) var(--space-3);
     display: inline-flex;
     flex-direction: column;
     align-items: center;
@@ -186,73 +189,71 @@ onUnmounted(() => {
     min-width: fit-content;
     height: auto;
     min-height: fit-content;
-    border-radius: 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .element:hover {
     transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-cloud);
 }
 
 .element.missing {
-    border-color: #ef4444;
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
-    animation: missingPulse 2s ease-in-out infinite;
-}
-
-@keyframes missingPulse {
-    0%, 100% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15); }
-    50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.08); }
+    border-color: #fecaca;
+    background-color: var(--color-error-bg);
+    box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.1);
 }
 
 .element-header {
-    width :100%;
+    width: 100%;
 }
 
 .element-header:hover {
     background-color: rgba(255, 255, 255, 0.5);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
 }
 
 .element-header-input {
-    color: #000000;
+    color: var(--color-ink);
     background-color: transparent;
-    font-size: 16px;
-    font-weight: bold;
+    font-size: 14px;
+    font-weight: 600;
     border: none;
     text-align: center;
     width: auto;
     min-width: 1ch;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    transition: all 0.15s ease;
 }
 
 .element-header-display {
-    color: #000000;
+    color: var(--color-slate);
     background-color: transparent;
-    font-size: 16px;
-    font-weight: bold;
+    font-size: 14px;
+    font-weight: 600;
     border: none;
     text-align: center;
     width: auto;
     min-width: 1ch;
-    border-radius: 4px;
-    padding: 0;
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
 }
 
 .element-header-input:focus {
-    background-color: rgba(255, 255, 255, 0.8);
-    outline: 2px solid #3b82f6;
-    border-radius: 4px;
+    background-color: var(--color-white);
+    outline: none;
+    box-shadow: var(--shadow-focus);
 }
 
 .element-header-line {
     border: none;
-    height: 3px;
-    background-color: #000000;
-    width: 95%;
-    margin: 0 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-cloud), transparent);
+    width: 85%;
+    margin: var(--space-1) 0;
 }
 
 .element-content {
@@ -261,49 +262,62 @@ onUnmounted(() => {
 
 .element-content:hover {
     background-color: rgba(255, 255, 255, 0.5);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
 }
 
 .element-content-input {
     background-color: transparent;
-    font-size: 16px;
-    color: #000000;
+    font-size: 14px;
+    color: var(--color-ink);
     border: none;
     text-align: center;
-    font-weight: bold;
+    font-weight: 500;
     width: auto;
     min-width: 1ch;
-    border-radius: 4px;
-    padding: 0;
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
     line-height: normal;
+    transition: all 0.15s ease;
 }
 
 .element-content-input:focus {
-    background-color: rgba(255, 255, 255, 0.8);
-    outline: 2px solid #3b82f6;
-    border-radius: 4px;
+    background-color: var(--color-white);
+    outline: none;
+    box-shadow: var(--shadow-focus);
 }
 
 .context-menu {
     position: fixed;
-    background-color: #ffffff;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-    border-radius: 10px;
+    background-color: var(--color-white);
+    border: 1px solid var(--color-mist);
+    box-shadow: var(--shadow-xl);
+    border-radius: var(--radius-lg);
     z-index: 1000;
-    min-width: 100px;
+    min-width: 120px;
     overflow: hidden;
+    padding: var(--space-1);
 }
 
 .context-menu-item {
-    padding: 10px 16px;
+    padding: var(--space-2) var(--space-3);
     cursor: pointer;
-    color: #1e293b;
+    color: var(--color-ink);
     font-weight: 500;
-    transition: background-color 0.15s ease;
+    transition: all 0.15s ease;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 13px;
 }
 
 .context-menu-item:hover {
-    background-color: #f1f5f9;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+}
+
+.context-menu-item::before {
+    content: '📋';
+    font-size: 13px;
 }
 </style>

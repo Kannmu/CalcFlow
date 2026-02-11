@@ -44,9 +44,9 @@ const isError = computed(() => {
 })
 
 const errorMessage = computed(() => {
-    if (result.value === 'Circular Dependency') return '循环依赖：节点间形成了相互引用'
-    if (result.value === 'Self Reference') return '自引用：节点不能引用自身'
-    if (result.value === 'Error') return '表达式错误：请检查输入'
+    if (result.value === 'Circular Dependency') return 'Circular dependency detected between nodes'
+    if (result.value === 'Self Reference') return 'Node cannot reference itself'
+    if (result.value === 'Error') return 'Invalid expression. Please check your input'
     return ''
 })
 
@@ -63,6 +63,11 @@ const { highlightedInputHtml } = useHighlighter(expression)
 const latexExpression = ref('')
 
 async function updateLatexExpression() {
+    // Handle empty expression - show placeholder
+    if (!expression.value || expression.value.trim() === '') {
+        latexExpression.value = ''
+        return
+    }
     latexExpression.value = await latexFromExpression(expression.value, result.value)
 }
 
@@ -72,6 +77,13 @@ function onElementUpdate(index, newValue) {
         tokens[index].value = String(newValue);
         expression.value = tokens.map(t => t.value).join(' ');
     }
+}
+
+function onElementCopy(value) {
+    // Dispatch custom event that App.vue can listen to
+    window.dispatchEvent(new CustomEvent('calcflow:toast', {
+        detail: { message: `Copied: ${value}`, type: 'success' }
+    }))
 }
 
 function cleanExpression() {
@@ -125,7 +137,7 @@ onUnmounted(() => {
     <div class="node" data-testid="node" :class="{ error: isError }" :style="{ backgroundColor: elementBackgroundColor }">
         <button class="delete-button" data-testid="node-delete" @click="$emit('delete')">X</button>
         <div v-if="isError" class="node-error-badge" data-testid="node-error" :title="errorMessage">⚠️</div>
-        <div class="node-latex">
+        <div v-if="latexExpression" class="node-latex">
             <LatexRenderer :latex="latexExpression" />
         </div>
         <div class="node-elements">
@@ -164,7 +176,7 @@ onUnmounted(() => {
             </div>
 
             <div class="node-elements-output">
-                <Element :header="props.header" :content="result" :isResult="true" @update:header="editableHeader = $event" />
+                <Element :header="props.header" :content="result" :isResult="true" @update:header="editableHeader = $event" @copy="onElementCopy" />
             </div>
 
         </div>
@@ -172,7 +184,7 @@ onUnmounted(() => {
         <div class="node-expression">
             <div class="expression-container">
                 <div class="expression-highlighter" v-html="highlightedInputHtml"></div>
-                <input ref="expressionInputRef" class="node-expression-input" data-testid="node-expression" v-model="expression" @input="onExpressionInput" @keydown="onExpressionKeydown" @focus="onExpressionFocus" @blur="onExpressionBlur" @change="cleanExpression" />
+                <input ref="expressionInputRef" class="node-expression-input" data-testid="node-expression" v-model="expression" @input="onExpressionInput" @keydown="onExpressionKeydown" @focus="onExpressionFocus" @blur="onExpressionBlur" @change="cleanExpression" placeholder="Enter expression..." />
                 <div v-if="suggestionsOpen" class="autocomplete-menu">
                     <div v-for="(item, idx) in suggestionItems" :key="item.type + ':' + item.label" class="autocomplete-item" :class="{ active: idx === selectedSuggestionIndex }" @mousedown.prevent="applySuggestionAt(idx)">
                         <span class="autocomplete-type">{{ item.type === 'function' ? 'fn' : (item.type === 'constant' ? 'const' : 'node') }}</span>
@@ -189,161 +201,180 @@ onUnmounted(() => {
 <style>
 .node {
     position: relative;
-    border: 3px solid #000000;
-    background-color: #f8f9fa;
-    padding: 8px;
+    border: 1px solid var(--color-mist);
+    background-color: var(--color-white);
+    padding: var(--space-4) var(--space-5);
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 80px;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    transition: box-shadow 0.2s ease, transform 0.15s ease;
+    min-width: 120px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: grab;
+    animation: nodeAppear 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .node:hover {
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+    border-color: var(--color-cloud);
+}
+
+.node:active {
+    cursor: grabbing;
 }
 
 .node.error {
-    border-color: #ef4444;
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15), 0 4px 16px rgba(239, 68, 68, 0.1);
-    animation: errorPulse 2s ease-in-out infinite;
+    border-color: #fecaca;
+    background-color: var(--color-error-bg);
+    box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.1), var(--shadow-md);
 }
 
-@keyframes errorPulse {
-    0%, 100% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15), 0 4px 16px rgba(239, 68, 68, 0.1); }
-    50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.1), 0 4px 20px rgba(239, 68, 68, 0.15); }
+.node.error:hover {
+    box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.15), var(--shadow-lg);
 }
 
 .delete-button {
     position: absolute;
-    top: 6px;
-    right: 6px;
-    background: #fee2e2;
-    color: #dc2626;
-    border: 2px solid #dc2626;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
+    top: var(--space-2);
+    right: var(--space-2);
+    background: var(--color-error-bg);
+    color: var(--color-error);
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-md);
+    width: 28px;
+    height: 28px;
     cursor: pointer;
-    font-weight: bold;
-    font-size: 14px;
+    font-weight: 500;
+    font-size: 13px;
     display: flex;
     justify-content: center;
     align-items: center;
     padding: 0;
-    line-height: 1;
-    opacity: 0;
-    transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+    opacity: 0.5;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-sm);
 }
 
 .node:hover .delete-button {
-    opacity: 1;
+    opacity: 0.7;
 }
 
 .delete-button:hover {
     background: #fecaca;
-    transform: scale(1.1);
+    opacity: 1;
+    transform: scale(1.05);
+    border-color: #fca5a5;
+}
+
+.delete-button:active {
+    transform: scale(0.95);
 }
 
 .node-error-badge {
     position: absolute;
-    top: 6px;
-    left: 6px;
-    background: #fee2e2;
-    color: #dc2626;
-    border: 2px solid #dc2626;
-    border-radius: 50%;
-    width: 22px;
-    height: 22px;
+    top: var(--space-2);
+    left: var(--space-2);
+    background: var(--color-error-bg);
+    color: var(--color-error);
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-md);
+    width: 24px;
+    height: 24px;
     cursor: help;
-    font-weight: bold;
+    font-weight: 500;
     font-size: 12px;
     display: flex;
     justify-content: center;
     align-items: center;
     padding: 0;
-    line-height: 1;
     z-index: 10;
+    transition: all 0.15s ease;
+}
+
+.node-error-badge:hover {
+    background: #fecaca;
+    transform: scale(1.1);
 }
 
 .node-elements {
     display: flex;
     flex-direction: row;
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-1);
 }
 
 .node-elements-input {
     display: flex;
     flex-direction: row;
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px;
 }
 
 .node-elements-operator {
-    color: #000;
-    font-size: 18px;
-    font-weight: bold;
-    margin: 0 3px;
+    color: var(--color-slate);
+    font-size: 16px;
+    font-weight: 500;
+    margin: 0 2px;
 }
 
 .node-elements-operator-parenthesis {
-    color: #000;
-    font-size: 22px;
-    font-weight: bold;
-    margin: 0 3px;
+    color: var(--color-silver);
+    font-size: 18px;
+    font-weight: 400;
+    margin: 0 2px;
 }
 
 .node-elements-function {
-    color: #000;
-    font-size: 18px;
-    font-weight: bold;
-    margin: 0 3px;
+    color: var(--color-accent);
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 2px;
 }
 
 .node-elements-comma {
-    color: #000;
-    font-size: 18px;
-    font-weight: bold;
-    margin: 0 3px;
+    color: var(--color-silver);
+    font-size: 15px;
+    margin: 0 2px;
 }
 
 .node-elements-constant {
-    color: #000;
-    font-size: 18px;
-    font-weight: bold;
-    margin: 0 3px;
+    color: var(--color-success);
+    font-size: 15px;
+    font-weight: 500;
+    margin: 0 2px;
 }
 
 .node-elements-operator-equal {
-    color: #000;
-    font-size: 20px;
-    font-weight: bold;
-    margin: 0 10px;
+    color: var(--color-silver);
+    font-size: 17px;
+    font-weight: 400;
+    margin: 0 var(--space-2);
 }
 
 .node-expression {
-    color: #000000;
-    margin-top: 8px;
-    font-size: 16px;
-    font-weight: bold;
+    color: var(--color-ink);
+    margin-top: var(--space-3);
+    font-size: 14px;
+    font-weight: 400;
     border: none;
     text-align: center;
-    padding: 6px 0;
+    padding: var(--space-2) 0;
     width: 100%;
     background-color: transparent;
 }
 
-.node-expression:focus {
-    background-color: rgba(255, 255, 255, 0.8);
-    outline: 2px solid #3b82f6;
-    border-radius: 6px;
-}
 .expression-container {
     position: relative;
     width: 100%;
+    min-height: 34px;
 }
+
 .expression-highlighter {
     position: absolute;
     top: 0;
@@ -351,85 +382,138 @@ onUnmounted(() => {
     right: 0;
     bottom: 0;
     pointer-events: none;
-    background-color: rgba(255, 255, 255, 0.7);
-    color: #000000;
-    border-radius: 6px;
-    padding: 6px 8px;
-    font-size: 16px;
-    font-weight: bold;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 400;
     white-space: pre;
     text-align: center;
-}
-.node-expression-input {
-    position: relative;
-    background-color: transparent;
-    color: transparent;
-    caret-color: #000000;
-    margin-top: 6px;
-    font-size: 16px;
-    font-weight: bold;
-    border: none;
-    text-align: center;
-    padding: 6px 8px;
-    width: 100%;
-    border-radius: 6px;
-}
-.node-expression-input:focus {
-    background-color: transparent;
-    outline: 2px solid #3b82f6;
-}
-.node-latex {
-    margin-bottom: 6px;
+    border: 1px solid var(--color-mist);
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.hl-number { color: #568ddf }
-.hl-operator { color: #64ce7d; font-weight: bold }
-.hl-function { color: #805cc4 }
-.hl-reference { color: #0f1676; font-weight: 600 }
-.hl-parenthesis { color: #000000; font-weight: bold }
-.hl-comma { color: #000000 }
-.hl-constant { color: #2da44e }
-.hl-placeholder { color: #9ca3af }
+.node-expression-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: transparent;
+    color: transparent;
+    caret-color: var(--color-accent);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 400;
+    border: 1px solid transparent;
+    text-align: center;
+    padding: var(--space-2) var(--space-3);
+    width: 100%;
+    border-radius: var(--radius-md);
+    transition: all 0.15s ease;
+}
+
+.node-expression-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+.node-expression-input:focus + .expression-highlighter,
+.node-expression-input:focus ~ .expression-highlighter {
+    background-color: var(--color-white);
+    border-color: var(--color-accent);
+}
+
+.node-expression-input::placeholder {
+    color: var(--color-silver);
+}
+
+.node-latex {
+    margin-bottom: var(--space-3);
+    padding: var(--space-1) var(--space-4);
+    background: var(--color-paper);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-mist);
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Syntax Highlighting Colors */
+.hl-number { color: var(--color-accent); }
+.hl-operator { color: var(--color-success); font-weight: 500; }
+.hl-function { color: #7c3aed; }
+.hl-reference { color: var(--color-ink); font-weight: 500; }
+.hl-parenthesis { color: var(--color-slate); }
+.hl-comma { color: var(--color-silver); }
+.hl-constant { color: var(--color-success); }
+.hl-placeholder { color: var(--color-silver); }
+
 .autocomplete-menu {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    top: calc(100% + 4px);
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 6px;
+    top: calc(100% + var(--space-2));
+    background: var(--color-white);
+    border: 1px solid var(--color-mist);
+    border-radius: var(--radius-lg);
+    padding: var(--space-1);
     z-index: 1001;
-    max-height: 200px;
+    max-height: 220px;
     overflow-y: auto;
-    min-width: 220px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    min-width: 180px;
+    max-width: 260px;
+    box-shadow: var(--shadow-xl);
 }
+
 .autocomplete-item {
     display: flex;
-    gap: 10px;
+    gap: var(--space-3);
     align-items: center;
-    padding: 8px 12px;
+    padding: var(--space-2) var(--space-3);
     cursor: pointer;
-    color: #000000;
-    border-radius: 6px;
-    transition: background-color 0.15s ease;
+    color: var(--color-ink);
+    border-radius: var(--radius-md);
+    transition: all 0.1s ease;
 }
+
 .autocomplete-item:hover,
 .autocomplete-item.active {
-    background: #f1f5f9;
+    background: var(--color-paper);
 }
+
+.autocomplete-item.active {
+    background: var(--color-accent-glow);
+}
+
 .autocomplete-type {
-    font-size: 11px;
-    color: #64748b;
+    font-size: 10px;
+    color: var(--color-slate);
     text-transform: uppercase;
     font-weight: 600;
     padding: 2px 6px;
-    background: #e2e8f0;
-    border-radius: 4px;
+    background: var(--color-paper);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
 }
+
+.autocomplete-item:hover .autocomplete-type,
+.autocomplete-item.active .autocomplete-type {
+    background: var(--color-accent-glow);
+    color: var(--color-accent);
+}
+
 .autocomplete-label {
-    font-weight: 600;
-    color: #1e293b;
+    font-weight: 500;
+    color: var(--color-ink);
+    flex: 1;
+    font-size: 14px;
 }
 </style>

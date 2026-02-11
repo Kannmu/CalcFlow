@@ -167,93 +167,163 @@ defineExpose({ loadWorkspaceFromArray, clearAllNodes })
 .canvas-container {
   display: flex;
   align-items: flex-start;
-  gap: 15px;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 800px;
 }
 
 .canvas-gap-large {
-  gap: 24px;
+  gap: var(--space-8);
 }
 
 .node-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 15px;
+  gap: var(--space-4);
+  flex: 1;
+  min-width: 0;
 }
 
 .add-node-button {
-  background-color: #ffffff;
-  color: #000000;
-  border: 3px solid #000000;
-  border-radius: 8px;
-  padding: 5px 10px;
+  background-color: var(--color-white);
+  color: var(--color-ink);
+  border: 1px solid var(--color-mist);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
   cursor: pointer;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: 14px;
+  font-weight: 600;
   align-self: flex-start;
   position: sticky;
-  top: 15px;
-  height: 50px;
+  top: var(--space-4);
+  height: auto;
+  min-height: 44px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .add-node-button:hover {
-  background-color: #f0f0f0;
+  background-color: var(--color-paper);
+  border-color: var(--color-cloud);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
+.add-node-button:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
 
 .quick-start {
-  background: #ffffff;
-  border: 3px solid #000000;
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
+  background: var(--color-white);
+  border: 1px solid var(--color-mist);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-3);
+  box-shadow: var(--shadow-sm);
+  width: 100%;
+  max-width: 600px;
+  position: relative;
 }
 
 .quick-start-title {
-  font-size: 16px;
-  font-weight: bold;
-  color: #000000;
-  margin: 0 0 6px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin: 0 0 var(--space-3) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.quick-start-title::before {
+  content: '💡';
+  font-size: 15px;
 }
 
 .quick-start-list {
-  list-style: disc;
-  padding-left: 16px;
+  list-style: none;
+  padding-left: 0;
   margin: 0;
-  color: #000000;
+  color: var(--color-slate);
 }
 
 .quick-start-list li {
-  font-size: 14px;
-  margin: 4px 0;
+  font-size: 13px;
+  margin: var(--space-2) 0;
+  padding-left: var(--space-5);
+  position: relative;
+  line-height: 1.5;
+}
+
+.quick-start-list li::before {
+  content: '•';
+  position: absolute;
+  left: var(--space-2);
+  color: var(--color-accent);
+  font-weight: bold;
 }
 
 .quick-start-list code {
-  background: #f1f5f9;
-  color: #213b1e;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.5rem;
-  font-weight: 600;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  font-size: 12px;
+  border: 1px solid var(--color-mist);
+  font-family: var(--font-mono);
 }
 
 .node-container :deep(.node.dragging) {
-  opacity: 0.4;
-  transform: scale(0.98);
+  opacity: 0.6;
+  transform: scale(0.96) rotate(1deg);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+  cursor: grabbing;
+  z-index: 100;
 }
 
 .node-container :deep(.node.drag-over) {
   position: relative;
 }
 
-.node-container :deep(.node.drag-over::after) {
+.node-container :deep(.node.drag-over::before) {
   content: '';
   position: absolute;
-  top: -8px;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: #3b82f6;
+  top: -10px;
+  left: var(--space-5);
+  right: var(--space-5);
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-light), var(--color-accent));
   border-radius: 2px;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 12px var(--color-accent-glow);
+  animation: dropIndicator 1s ease-in-out infinite;
+}
+
+@keyframes dropIndicator {
+  0%, 100% { opacity: 0.7; transform: scaleX(0.95); }
+  50% { opacity: 1; transform: scaleX(1); }
+}
+
+@media (max-width: 768px) {
+  .canvas-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+
+  .add-node-button {
+    position: relative;
+    top: 0;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .quick-start {
+    padding: var(--space-3) var(--space-4);
+  }
 }
 </style>

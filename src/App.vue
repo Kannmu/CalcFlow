@@ -1,12 +1,45 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import Canvas from './components/Canvas.vue'
 import Instruction from './components/Instruction.vue'
+import Toast from './components/Toast.vue'
 import { nodeManager } from './utils.js'
 const instructionRef = ref(null)
 const canvasRef = ref(null)
 const importInputRef = ref(null)
 const LS_KEY = 'calcflow_workspace'
+
+// Toast state
+const toasts = ref([])
+let toastId = 0
+
+function showToast(message, type = 'info', duration = 3000) {
+  const id = ++toastId
+  toasts.value.push({ id, message, type, duration })
+}
+
+function removeToast(id) {
+  const index = toasts.value.findIndex(t => t.id === id)
+  if (index > -1) {
+    toasts.value.splice(index, 1)
+  }
+}
+
+// Listen for toast events from child components
+function handleToastEvent(e) {
+  const { message, type = 'info', duration = 2000 } = e.detail || {}
+  if (message) {
+    showToast(message, type, duration)
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('calcflow:toast', handleToastEvent)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('calcflow:toast', handleToastEvent)
+})
 
 function getWorkspaceSnapshot() {
   const entries = Array.from(nodeManager.nodes.entries())
@@ -24,11 +57,13 @@ function exportWorkspace() {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+  showToast('Workspace exported successfully', 'success')
 }
 
 function cleanWorkspace() {
   if (canvasRef.value && typeof canvasRef.value.clearAllNodes === 'function') {
     canvasRef.value.clearAllNodes()
+    showToast('Workspace cleared', 'info')
   }
 }
 
@@ -50,8 +85,13 @@ function onImportFile(e) {
         try {
           localStorage.setItem(LS_KEY, JSON.stringify(data))
         } catch (e) {}
+        showToast('Workspace imported successfully', 'success')
+      } else {
+        showToast('Invalid workspace file', 'error')
       }
-    } catch (err) {}
+    } catch (err) {
+      showToast('Failed to import workspace', 'error')
+    }
     if (importInputRef.value) importInputRef.value.value = ''
   }
   reader.readAsText(file)
@@ -60,6 +100,18 @@ function onImportFile(e) {
 
 <template>
   <div class="app-container">
+    <!-- Toast Container -->
+    <div class="toast-container">
+      <Toast
+        v-for="toast in toasts"
+        :key="toast.id"
+        :message="toast.message"
+        :type="toast.type"
+        :duration="toast.duration"
+        @close="removeToast(toast.id)"
+      />
+    </div>
+
     <Instruction ref="instructionRef" />
     <header class="app-header">
       <div class="header-content">
@@ -111,13 +163,13 @@ function onImportFile(e) {
     <footer class="app-footer">
       <div class="footer-content">
         <div class="footer-shortcuts">
-          <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 添加节点
+          <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Add Node
           <span class="shortcut-divider">|</span>
-          <kbd>Ctrl</kbd>+<kbd>D</kbd> 复制节点
+          <kbd>Ctrl</kbd>+<kbd>D</kbd> Duplicate
           <span class="shortcut-divider">|</span>
-          <kbd>Escape</kbd> 取消
+          <kbd>Escape</kbd> Cancel
           <span class="shortcut-divider">|</span>
-          拖拽排序节点
+          Drag to Reorder
         </div>
         <p class="footer-text">
           Created by <a href="https://kannmu.top/" target="_blank" rel="noopener noreferrer" class="footer-link">Kannmu</a>
@@ -135,177 +187,230 @@ function onImportFile(e) {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.toast-container {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.toast-container > * {
+  pointer-events: auto;
+}
+
+@media (max-width: 640px) {
+  .toast-container {
+    top: auto;
+    bottom: var(--space-4);
+    left: var(--space-4);
+    right: var(--space-4);
+    align-items: center;
+  }
 }
 
 .app-header {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
-  padding: 2rem 0;
+  background: var(--color-white);
+  border-bottom: 1px solid var(--color-mist);
+  padding: var(--space-10) 0 var(--space-8);
   text-align: center;
+  position: relative;
+}
+
+.app-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+  border-radius: 2px;
 }
 
 .header-content {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 var(--space-6);
 }
 
 .app-brand {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 .app-logo {
-  width: 100px;
+  width: 80px;
   height: auto;
+  opacity: 0.9;
 }
 
 .app-title {
-  font-size: 4.5rem;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0 0 0.5rem 0;
-  letter-spacing: -0.025em;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 3.5rem;
+  font-weight: 800;
+  color: var(--color-ink);
+  margin: 0;
+  letter-spacing: -0.03em;
+  line-height: 1;
 }
 
 .app-subtitle {
-  font-size: 1.125rem;
-  color: #64748b;
-  margin: 0 0 1.5rem 0;
+  font-size: 1rem;
+  color: var(--color-slate);
+  margin: 0 0 var(--space-6) 0;
   font-weight: 400;
+  letter-spacing: 0.02em;
 }
 
 .app-nav {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  gap: 1rem;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 
 .nav-link {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 0.75rem;
-  color: #475569;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-white);
+  border: 1px solid var(--color-mist);
+  border-radius: var(--radius-md);
+  color: var(--color-ink-light);
   text-decoration: none;
   font-weight: 500;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-size: 0.875rem;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 1);
-  border-color: rgba(148, 163, 184, 0.8);
+  background: var(--color-paper);
+  border-color: var(--color-cloud);
+  color: var(--color-ink);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
+}
+
+.nav-link:active {
+  transform: translateY(0);
 }
 
 .nav-icon {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  opacity: 0.7;
+}
+
+.nav-link:hover .nav-icon {
+  opacity: 1;
 }
 
 .app-main {
   flex: 1;
-  padding: 3rem 2rem;
+  padding: var(--space-8) var(--space-6);
   display: flex;
   justify-content: center;
 }
 
 .app-footer {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(226, 232, 240, 0.8);
-  padding: 2rem 0;
+  background: var(--color-white);
+  border-top: 1px solid var(--color-mist);
+  padding: var(--space-6) 0;
   text-align: center;
 }
 
 .footer-content {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 var(--space-6);
 }
 
 .footer-text {
   font-size: 0.875rem;
-  color: #64748b;
-  margin: 0 0 0.5rem 0;
+  color: var(--color-slate);
+  margin: 0 0 var(--space-2) 0;
 }
 
 .footer-description {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--color-silver);
   margin: 0;
+  letter-spacing: 0.01em;
 }
 
 .footer-link {
-  color: #475569;
+  color: var(--color-accent);
   text-decoration: none;
   font-weight: 500;
-  transition: color 0.2s ease;
+  transition: color 0.15s ease;
 }
 
 .footer-link:hover {
-  color: #1e293b;
+  color: var(--color-ink);
 }
 
 .footer-shortcuts {
   font-size: 0.75rem;
-  color: #94a3b8;
-  margin-bottom: 0.75rem;
+  color: var(--color-silver);
+  margin-bottom: var(--space-4);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .footer-shortcuts kbd {
-  display: inline-block;
-  padding: 2px 6px;
-  font-size: 0.7rem;
-  font-family: ui-monospace, monospace;
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
-  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.6875rem;
+  font-family: var(--font-mono);
+  background: var(--color-paper);
+  border: 1px solid var(--color-cloud);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 0 var(--color-white), inset 0 1px 2px rgba(15, 23, 42, 0.05);
+  color: var(--color-ink-light);
+  min-height: 22px;
 }
 
 .shortcut-divider {
-  color: #cbd5e1;
-  margin: 0 4px;
+  color: var(--color-cloud);
+  margin: 0 var(--space-1);
 }
 
 @media (max-width: 768px) {
   .app-title {
     font-size: 2.25rem;
   }
-  
+
   .app-subtitle {
-    font-size: 1rem;
+    font-size: 0.9375rem;
   }
-  
+
+  .app-header {
+    padding: var(--space-6) 0 var(--space-6);
+  }
+
   .header-content,
   .footer-content {
-    padding: 0 1rem;
+    padding: 0 var(--space-4);
   }
-  
+
   .app-main {
-    padding: 2rem 1rem;
+    padding: var(--space-6) var(--space-4);
   }
 }
 
@@ -313,12 +418,21 @@ function onImportFile(e) {
   .app-nav {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.75rem;
+    gap: var(--space-2);
   }
   .nav-link {
     width: 100%;
     justify-content: center;
-    padding: 0.75rem 1rem;
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .footer-shortcuts {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .shortcut-divider {
+    display: none;
   }
 }
 </style>

@@ -63,7 +63,7 @@ function useHighlighter(expression) {
   }
 
   const highlightedInputHtml = computed(() => {
-    if (!expression.value) return '<span class="hl-placeholder">Enter expression here</span>'
+    if (!expression.value) return ''
     return highlightExpressionHtml(expression.value)
   })
 
