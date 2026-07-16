@@ -1,323 +1,171 @@
 <script setup>
-import { ref, toRefs, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { Copy } from 'lucide-vue-next'
 import { generateRandomColor } from '../utils.js'
 
-const emit = defineEmits(['update:content','update:header', 'copy'])
-
 const props = defineProps({
-    header: String,
-    content: [String, Number],
-    isRef: Boolean,
-    isResult: Boolean,
-    isMissing: Boolean,
+  header: String,
+  content: [String, Number],
+  isRef: Boolean,
+  isResult: Boolean,
+  isMissing: Boolean,
 })
 
+const emit = defineEmits(['update:content', 'update:header', 'copy'])
 
-const { header } = toRefs(props)
-const editableHeader = ref(header.value)
-
-const headerInputRef = ref(null)
-const contentInputRef = ref(null)
-
-let __measureCanvas = null
-let __measureContext = null
-const adjustInputWidth = (inputElement, value) => {
-    if (!inputElement) return
-    if (!__measureCanvas) {
-        __measureCanvas = document.createElement('canvas')
-        __measureContext = __measureCanvas.getContext('2d')
-    }
-    const computedStyle = window.getComputedStyle(inputElement)
-    __measureContext.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`
-    const textWidth = __measureContext.measureText(value || '').width
-    const minWidth = Math.max(textWidth + 20, 30)
-    inputElement.style.width = `${minWidth}px`
-}
-
-watch(editableHeader, (newValue) => {
-    emit('update:header', newValue)
-    nextTick(() => {
-        adjustInputWidth(headerInputRef.value, newValue)
-    })
-})
-
-const { content } = toRefs(props)
-const internalContent = ref(content.value)
-
-watch(content, (newValue) => {
-    internalContent.value = newValue
-    nextTick(() => {
-        adjustInputWidth(contentInputRef.value, String(newValue))
-    })
-})
-
+const editableHeader = ref(props.header || '')
+const internalContent = ref(props.content)
 const isEditing = ref(false)
+const headerInputRef = ref(null)
+
+watch(() => props.header, (value) => {
+  if (typeof value === 'string' && value !== editableHeader.value) editableHeader.value = value
+})
+
+watch(() => props.content, (value) => {
+  internalContent.value = value
+})
+
+watch(editableHeader, (value) => emit('update:header', value))
+
+const displayContent = computed(() => {
+  const value = internalContent.value
+  if (isEditing.value || typeof value !== 'number' || !Number.isFinite(value)) return value
+  const absolute = Math.abs(value)
+  const decimalLength = String(value).split('.')[1]?.length || 0
+  if (absolute >= 1e7 || (absolute > 0 && absolute < 1e-4)) {
+    const [mantissa, exponent] = value.toExponential(4).split('e')
+    return `${Number(mantissa)}e${exponent}`
+  }
+  return decimalLength > 6 ? Number(value.toFixed(6)) : value
+})
+
 const editableContent = computed({
-    get() {
-        if (isEditing.value) {
-            return internalContent.value
-        }
-        const content = internalContent.value
-        if (typeof content === 'number') {
-            const s = String(content)
-            const absValue = Math.abs(content)
-            const integerPartLength = Math.trunc(absValue).toString().length
-            const decimalPart = s.split('.')[1]
-            if (integerPartLength > 6 || (decimalPart && decimalPart.length > 3)) {
-                return content.toExponential(4)
-            }
-        }
-        return internalContent.value
-    },
-    set(val) {
-        if (props.isResult || props.isRef) {
-            return
-        }
-        const sVal = String(val).trim()
-        let newValue
-        if (sVal === '') {
-            newValue = ''
-        } else {
-            const num = Number(sVal)
-            if (!isNaN(num)) {
-                newValue = num
-            } else {
-                newValue = sVal
-            }
-        }
-        internalContent.value = newValue
-        emit('update:content', newValue)
-        nextTick(() => {
-            adjustInputWidth(contentInputRef.value, String(newValue))
-        })
-    },
+  get: () => displayContent.value,
+  set: (value) => {
+    if (props.isResult || props.isRef) return
+    const trimmed = String(value).trim()
+    const numeric = Number(trimmed)
+    const normalized = trimmed === '' ? '' : Number.isNaN(numeric) ? trimmed : numeric
+    internalContent.value = normalized
+    emit('update:content', normalized)
+  },
 })
 
-const elementBackgroundColor = computed(() => generateRandomColor(editableHeader.value + String(internalContent.value), 30, 70))
+const elementAccent = computed(() => generateRandomColor(`${editableHeader.value}:${internalContent.value}`, 38, 48))
 
-const showMenu = ref(false)
-const menuPosition = ref({ x: 0, y: 0 })
-const elementRef = ref(null)
-
-const openMenu = (event) => {
-    if (!props.isResult) return
-    event.preventDefault()
-
-    // Calculate position relative to the element
-    const rect = elementRef.value?.getBoundingClientRect()
-    if (rect) {
-        const menuWidth = 100
-        const menuHeight = 40
-        let x = rect.left + rect.width / 2 - menuWidth / 2
-        let y = rect.bottom + 8
-
-        // Adjust if menu would go off screen
-        if (x + menuWidth > window.innerWidth) {
-            x = window.innerWidth - menuWidth - 10
-        }
-        if (x < 10) {
-            x = 10
-        }
-        if (y + menuHeight > window.innerHeight) {
-            y = rect.top - menuHeight - 8
-        }
-
-        menuPosition.value = { x, y }
-    } else {
-        menuPosition.value = { x: event.clientX, y: event.clientY }
-    }
-
-    showMenu.value = true
-    document.addEventListener('click', handleClickOutside, true)
+async function copyToClipboard() {
+  const value = String(internalContent.value ?? '')
+  try {
+    await navigator.clipboard.writeText(value)
+  } catch {
+    const textArea = document.createElement('textarea')
+    textArea.value = value
+    textArea.style.position = 'fixed'
+    textArea.style.opacity = '0'
+    document.body.appendChild(textArea)
+    textArea.select()
+    document.execCommand('copy')
+    textArea.remove()
+  }
+  emit('copy', value)
 }
 
-const handleClickOutside = (event) => {
-    showMenu.value = false
-    document.removeEventListener('click', handleClickOutside, true)
+function selectHeader() {
+  nextTick(() => headerInputRef.value?.select())
 }
-
-
-
-const copyToClipboard = () => {
-    navigator.clipboard.writeText(internalContent.value)
-    emit('copy', internalContent.value)
-}
-
-onMounted(() => {
-    nextTick(() => {
-        adjustInputWidth(headerInputRef.value, editableHeader.value)
-        adjustInputWidth(contentInputRef.value, String(internalContent.value))
-    })
-    
-    return () => {
-        document.removeEventListener('click', handleClickOutside, true)
-    }
-})
-
-onUnmounted(() => {
-    document.removeEventListener('click', handleClickOutside, true)
-})
-
 </script>
 
 <template>
-    <div ref="elementRef" class="element" :class="{ missing: props.isMissing }" :style="{ backgroundColor: elementBackgroundColor }">
-        <div class="element-header">
-            <div v-if="isRef" class="element-header-display">{{ editableHeader }}</div>
-            <input v-else ref="headerInputRef" class="element-header-input" v-model="editableHeader" />
-        </div>
-        <hr class="element-header-line" />
-        <div class="element-content" @contextmenu="openMenu">
-            <div v-if="isResult || isRef" class="element-content-input">{{ editableContent }}</div>
-            <input v-else ref="contentInputRef" class="element-content-input" v-model="editableContent" @focus="isEditing = true" @blur="isEditing = false" />
-            <div v-if="showMenu" class="context-menu" :style="{ top: menuPosition.y + 'px', left: menuPosition.x + 'px' }">
-                <div class="context-menu-item" @click="copyToClipboard">Copy</div>
-            </div>
-        </div>
+  <div class="element" :class="{ missing: isMissing, result: isResult, reference: isRef }" :style="{ '--element-accent': elementAccent }" :title="isMissing ? `Missing node: ${header}` : undefined">
+    <div class="element-header">
+      <input
+        v-if="isResult"
+        ref="headerInputRef"
+        v-model="editableHeader"
+        class="element-header-input"
+        aria-label="Node name"
+        maxlength="256"
+        @focus="selectHeader"
+      />
+      <span v-else class="element-header-display">{{ editableHeader }}</span>
     </div>
+    <span class="element-divider"></span>
+    <div class="element-content">
+      <button
+        v-if="isResult"
+        type="button"
+        class="element-content-input copy-result"
+        title="Copy result"
+        @click="copyToClipboard"
+      >
+        <span>{{ displayContent }}</span>
+        <Copy :size="12" class="copy-icon" />
+      </button>
+      <span v-else-if="isRef" class="element-content-input">{{ displayContent }}</span>
+      <input
+        v-else
+        v-model="editableContent"
+        class="element-value-input"
+        aria-label="Constant value"
+        inputmode="decimal"
+        @focus="isEditing = true"
+        @blur="isEditing = false"
+      />
+    </div>
+  </div>
 </template>
 
-<style>
+<style scoped>
 .element {
-    border: 1px solid var(--color-mist);
-    background-color: var(--color-white);
-    padding: var(--space-2) var(--space-3);
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    width: auto;
-    min-width: fit-content;
-    height: auto;
-    min-height: fit-content;
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-sm);
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --element-accent: var(--color-accent);
+  min-width: 64px;
+  max-width: min(240px, 54vw);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+  background: var(--color-white);
+  border: 1px solid var(--color-mist);
+  border-left: 2px solid var(--element-accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  vertical-align: middle;
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
+.element:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.element.result { background: var(--color-ink); border-color: var(--color-ink); border-left-color: var(--element-accent); color: var(--color-white); }
+.element.missing { background: var(--color-error-bg); border-color: rgba(185, 71, 61, 0.5); border-style: dashed; }
 
-.element:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-    border-color: var(--color-cloud);
+.element-header, .element-content { min-width: 0; display: flex; justify-content: center; }
+.element-header-input, .element-header-display, .element-content-input, .element-value-input {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 5px 9px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--color-ink-light);
+  font-family: var(--font-mono);
+  font-size: 0.67rem;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-
-.element.missing {
-    border-color: #fecaca;
-    background-color: var(--color-error-bg);
-    box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.1);
-}
-
-.element-header {
-    width: 100%;
-}
-
-.element-header:hover {
-    background-color: rgba(255, 255, 255, 0.5);
-    border-radius: var(--radius-sm);
-}
-
-.element-header-input {
-    color: var(--color-ink);
-    background-color: transparent;
-    font-size: 14px;
-    font-weight: 600;
-    border: none;
-    text-align: center;
-    width: auto;
-    min-width: 1ch;
-    border-radius: var(--radius-sm);
-    padding: var(--space-1) var(--space-2);
-    transition: all 0.15s ease;
-}
-
-.element-header-display {
-    color: var(--color-slate);
-    background-color: transparent;
-    font-size: 14px;
-    font-weight: 600;
-    border: none;
-    text-align: center;
-    width: auto;
-    min-width: 1ch;
-    border-radius: var(--radius-sm);
-    padding: var(--space-1) var(--space-2);
-}
-
-.element-header-input:focus {
-    background-color: var(--color-white);
-    outline: none;
-    box-shadow: var(--shadow-focus);
-}
-
-.element-header-line {
-    border: none;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--color-cloud), transparent);
-    width: 85%;
-    margin: var(--space-1) 0;
-}
-
-.element-content {
-    width: 100%;
-}
-
-.element-content:hover {
-    background-color: rgba(255, 255, 255, 0.5);
-    border-radius: var(--radius-sm);
-}
-
-.element-content-input {
-    background-color: transparent;
-    font-size: 14px;
-    color: var(--color-ink);
-    border: none;
-    text-align: center;
-    font-weight: 500;
-    width: auto;
-    min-width: 1ch;
-    border-radius: var(--radius-sm);
-    padding: var(--space-1) var(--space-2);
-    line-height: normal;
-    transition: all 0.15s ease;
-}
-
-.element-content-input:focus {
-    background-color: var(--color-white);
-    outline: none;
-    box-shadow: var(--shadow-focus);
-}
-
-.context-menu {
-    position: fixed;
-    background-color: var(--color-white);
-    border: 1px solid var(--color-mist);
-    box-shadow: var(--shadow-xl);
-    border-radius: var(--radius-lg);
-    z-index: 1000;
-    min-width: 120px;
-    overflow: hidden;
-    padding: var(--space-1);
-}
-
-.context-menu-item {
-    padding: var(--space-2) var(--space-3);
-    cursor: pointer;
-    color: var(--color-ink);
-    font-weight: 500;
-    transition: all 0.15s ease;
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: 13px;
-}
-
-.context-menu-item:hover {
-    background-color: var(--color-paper);
-    color: var(--color-ink);
-}
-
-.context-menu-item::before {
-    content: '📋';
-    font-size: 13px;
-}
+.element-header-input { width: clamp(72px, 12vw, 150px); color: var(--color-white); font-weight: 650; }
+.element-header-input:focus { background: rgba(255,255,255,0.08); outline: none; }
+.element-header-display { display: block; color: var(--color-slate); }
+.element.missing .element-header-display { color: var(--color-error); }
+.element-divider { height: 1px; margin: 0 7px; background: var(--color-mist); }
+.element.result .element-divider { background: rgba(255,255,255,0.14); }
+.element-content-input, .element-value-input { width: 86px; padding-top: 6px; padding-bottom: 7px; color: var(--color-ink); font-size: 0.76rem; font-weight: 650; }
+.element.result { min-width: 152px; }
+.element.result .element-content-input { width: 100%; }
+.element-value-input:focus { background: var(--color-paper); outline: none; }
+.copy-result { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--color-white); cursor: copy; }
+.copy-result:hover { background: rgba(255,255,255,0.08); }
+.copy-icon { flex-shrink: 0; opacity: 0.45; }
+.copy-result:hover .copy-icon { opacity: 1; }
 </style>

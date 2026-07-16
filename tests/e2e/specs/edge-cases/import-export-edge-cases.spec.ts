@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import fs from 'node:fs'
 import { BasePage } from '../../pages/BasePage.js'
 import { CanvasPage } from '../../pages/CanvasPage.js'
 import { NodePage } from '../../pages/NodePage.js'
@@ -495,7 +496,6 @@ test.describe('导入导出一致性', () => {
 
     // 读取下载的文件内容
     const path = await download.path()
-    const fs = require('fs')
     const content = fs.readFileSync(path, 'utf8')
 
     await app.setImportFile({

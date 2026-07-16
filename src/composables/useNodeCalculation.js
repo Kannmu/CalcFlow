@@ -7,12 +7,20 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
   const lastExpression = ref('')
   const lastResult = ref(null)
   let recalculateTimer = null
+  let disposed = false
+  const seenReferenceHeaders = new Set()
+  const reservedMissingValues = new Set(['undefined', 'null', 'nan', 'infinity', 'true', 'false'])
+
+  function getKnownHeaders() {
+    return Array.from(nodeManager.nodes.values()).map(node => node.header).filter(Boolean)
+  }
 
   function updateDependencies() {
-    const tokens = decodeElementsEngine(expression.value)
+    const tokens = decodeElementsEngine(expression.value, getKnownHeaders())
     const newDependencies = new Set()
     for (const token of tokens) {
       if (token.type === 'reference') {
+        if (reservedMissingValues.has(String(token.value).toLowerCase())) continue
         const referencedNode = nodeManager.getNodeByHeader(token.value)
         if (referencedNode) {
           if (referencedNode.nodeId === nodeId.value) {
@@ -28,7 +36,19 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
             currentDependencies.value.clear()
             return false
           }
+          seenReferenceHeaders.add(token.value)
           newDependencies.add(referencedNode.nodeId)
+        } else if (seenReferenceHeaders.has(token.value)) {
+          result.value = 'Error'
+          nodeManager.updateNode(nodeId.value, {
+            result: result.value,
+            header: editableHeader.value,
+          })
+          currentDependencies.value.forEach(depNodeId => {
+            nodeManager.removeDependency(nodeId.value, depNodeId)
+          })
+          currentDependencies.value.clear()
+          return false
         }
       }
     }
@@ -54,6 +74,18 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
   }
 
   async function recalculate() {
+    const expressionAtStart = expression.value
+    if (!String(expression.value || '').trim()) {
+      result.value = 0
+      lastExpression.value = ''
+      lastResult.value = 0
+      nodeManager.updateNode(nodeId.value, {
+        result: 0,
+        header: editableHeader.value,
+      })
+      nodeManager.triggerDependentUpdates(nodeId.value)
+      return
+    }
     const dependenciesUpdated = updateDependencies()
     const currentExpressionWithDeps = expression.value + JSON.stringify(
       Array.from(currentDependencies.value).map(depId => {
@@ -64,18 +96,24 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
     if (!dependenciesUpdated) {
       // 即使依赖更新失败（如循环依赖），也触发依赖节点更新，让错误状态传播
       // 更新lastExpression以防止缓存过期值
+      const dependencyStateChanged = lastExpression.value !== currentExpressionWithDeps
       lastExpression.value = currentExpressionWithDeps
-      nodeManager.triggerDependentUpdates(nodeId.value)
+      if (dependencyStateChanged) nodeManager.triggerDependentUpdates(nodeId.value)
       return
     }
     if (lastExpression.value === currentExpressionWithDeps && lastResult.value !== null) {
       result.value = lastResult.value
       return
     }
-    const tokens = decodeElementsEngine(expression.value)
+    const knownHeaders = getKnownHeaders()
+    const tokens = decodeElementsEngine(expression.value, knownHeaders)
     const scope = {}
     for (const token of tokens) {
       if (token.type === 'reference') {
+        if (reservedMissingValues.has(String(token.value).toLowerCase())) {
+          scope[token.value] = 0
+          continue
+        }
         const n = nodeManager.getNodeByHeader(token.value)
         if (n && (n.result === 'Circular Dependency' || n.result === 'Self Reference' || n.result === 'Error')) {
           // 传播依赖节点的错误状态
@@ -89,14 +127,17 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
           nodeManager.triggerDependentUpdates(nodeId.value)
           return
         }
-        scope[token.value] = n ? n.result : 0
+        if (n) scope[token.value] = n.result
       }
     }
-    const calculatedResult = await evaluateExpression(expression.value, scope)
+    const calculatedResult = await evaluateExpression(expression.value, scope, knownHeaders)
+    if (disposed || expressionAtStart !== expression.value) return
     if (calculatedResult === 'Error' || isNaN(calculatedResult)) {
       result.value = 'Error'
     } else {
-      result.value = Math.round(calculatedResult * 1e6) / 1e6
+      result.value = Number.isFinite(calculatedResult) && Math.abs(calculatedResult) < Number.MAX_SAFE_INTEGER / 1e9
+        ? Math.round(calculatedResult * 1e9) / 1e9
+        : calculatedResult
     }
     lastExpression.value = currentExpressionWithDeps
     lastResult.value = result.value
@@ -108,16 +149,21 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
   }
 
   function debouncedRecalculate() {
+    if (disposed) return
     if (recalculateTimer) clearTimeout(recalculateTimer)
     recalculateTimer = setTimeout(() => {
       recalculate()
-    }, 100)
+    }, 20)
   }
 
   // 用于新节点注册时同步更新依赖
   function onNewNodeRegistered() {
-    // 立即同步更新依赖关系，不延迟
-    updateDependencies()
+    recalculate()
+  }
+
+  function disposeCalculation() {
+    disposed = true
+    if (recalculateTimer) clearTimeout(recalculateTimer)
   }
 
   return {
@@ -126,6 +172,7 @@ function useNodeCalculation({ expression, editableHeader, nodeId, result }) {
     recalculate,
     debouncedRecalculate,
     onNewNodeRegistered,
+    disposeCalculation,
     lastExpression,
     lastResult,
   }

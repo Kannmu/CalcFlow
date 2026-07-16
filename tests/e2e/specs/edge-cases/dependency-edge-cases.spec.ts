@@ -208,8 +208,8 @@ test.describe('深层依赖链', () => {
     // 初始状态正常
     await node.expectResult(3, 4)
 
-    // 让 D 引用 B，形成循环
-    await node.setExpression(3, 'B * 2')
+    // 让 B 引用 D，形成 B -> D -> C -> B 的循环
+    await node.setExpression(1, 'D * 2')
 
     // B, C, D 都应该报错
     await node.expectError(1)
