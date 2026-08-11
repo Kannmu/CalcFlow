@@ -12,16 +12,34 @@ async function loadMathjs() {
   return mathjsModule
 }
 
-function decodeElements(expression) {
+function decodeElements(expression, referenceNames = []) {
   if (!expression) return []
   const tokens = []
   const expr = String(expression).trim()
+  const knownReferences = [...new Set(referenceNames.filter(Boolean).map(String))]
+    .sort((a, b) => b.length - a.length)
   let i = 0
   const isLetter = c => /[a-zA-Z_]/.test(c)
   const isDigit = c => /[0-9]/.test(c)
+  const isIdentifierPart = c => Boolean(c && /[a-zA-Z0-9_]/.test(c))
+  const matchKnownReference = (offset) => knownReferences.find((name) => {
+    if (!expr.startsWith(name, offset)) return false
+    const before = expr[offset - 1]
+    const after = expr[offset + name.length]
+    if (isIdentifierPart(name[0]) && isIdentifierPart(before)) return false
+    if (isIdentifierPart(name[name.length - 1]) && isIdentifierPart(after)) return false
+    if (isIdentifierPart(name[0]) && expr.slice(offset + name.length).trimStart().startsWith('(')) return false
+    return true
+  })
   while (i < expr.length) {
     const c = expr[i]
     if (c === ' ' || c === '\t' || c === '\n') { i++; continue }
+    const knownReference = matchKnownReference(i)
+    if (knownReference) {
+      tokens.push({ type: 'reference', value: knownReference })
+      i += knownReference.length
+      continue
+    }
     if (isDigit(c) || (c === '.' && i + 1 < expr.length && isDigit(expr[i + 1]))) {
       const start = i
       let hasDot = c === '.'
@@ -31,6 +49,11 @@ function decodeElements(expression) {
         if (isDigit(ch)) { i++; continue }
         if (ch === '.') { if (hasDot) break; hasDot = true; i++; continue }
         break
+      }
+      if ((expr[i] === 'e' || expr[i] === 'E') && (isDigit(expr[i + 1]) || ((expr[i + 1] === '+' || expr[i + 1] === '-') && isDigit(expr[i + 2])))) {
+        i++
+        if (expr[i] === '+' || expr[i] === '-') i++
+        while (i < expr.length && isDigit(expr[i])) i++
       }
       const value = expr.slice(start, i)
       tokens.push({ type: 'number', value })
@@ -239,19 +262,35 @@ function evaluateTokens(tokens, scope) {
   if (!tokens || tokens.length === 0) return 0
   const output = []
   const ops = []
-  for (const token of tokens) {
+  let previousToken = null
+  for (const rawToken of tokens) {
+    const isUnaryMinus = rawToken.type === 'operator' && rawToken.value === '-' && (
+      !previousToken ||
+      previousToken.type === 'operator' ||
+      previousToken.type === 'unary' ||
+      previousToken.type === 'comma' ||
+      (previousToken.type === 'parenthesis' && previousToken.value === '(')
+    )
+    const token = isUnaryMinus ? { type: 'unary', value: '-' } : rawToken
     if (token.type === 'number' || token.type === 'reference' || token.type === 'constant') {
       output.push(token)
+      previousToken = token
       continue
     }
     if (token.type === 'function') {
+      ops.push({ ...token })
+      previousToken = token
+      continue
+    }
+    if (token.type === 'unary') {
       ops.push(token)
+      previousToken = token
       continue
     }
     if (token.type === 'operator') {
-      while (ops.length && ops[ops.length - 1].type === 'operator') {
-        const topOp = ops[ops.length - 1].value
-        const pTop = precedence(topOp)
+      while (ops.length && (ops[ops.length - 1].type === 'operator' || ops[ops.length - 1].type === 'unary')) {
+        const topToken = ops[ops.length - 1]
+        const pTop = topToken.type === 'unary' ? 4 : precedence(topToken.value)
         const pTok = precedence(token.value)
         const rightAssoc = isRightAssociative(token.value)
         if (pTop > pTok || (pTop === pTok && !rightAssoc)) {
@@ -261,27 +300,49 @@ function evaluateTokens(tokens, scope) {
         }
       }
       ops.push(token)
+      previousToken = token
       continue
     }
     if (token.type === 'comma') {
-      while (ops.length && !(ops[ops.length - 1].type === 'parenthesis' && ops[ops.length - 1].value === '(')) {
+      let openingIndex = ops.length - 1
+      while (openingIndex >= 0 && !(ops[openingIndex].type === 'parenthesis' && ops[openingIndex].value === '(')) {
+        openingIndex--
+      }
+      if (
+        openingIndex < 1 ||
+        ops[openingIndex - 1].type !== 'function' ||
+        !previousToken ||
+        previousToken.type === 'comma' ||
+        (previousToken.type === 'parenthesis' && previousToken.value === '(')
+      ) {
+        return 'Error'
+      }
+      while (ops.length - 1 > openingIndex) {
         output.push(ops.pop())
       }
+      ops[openingIndex].argumentCount++
+      previousToken = token
       continue
     }
     if (token.type === 'parenthesis') {
       if (token.value === '(') {
-        ops.push(token)
+        const isFunctionCall = previousToken && previousToken.type === 'function'
+        ops.push({ ...token, isFunctionCall, argumentCount: 0 })
       } else {
         while (ops.length && !(ops[ops.length - 1].type === 'parenthesis' && ops[ops.length - 1].value === '(')) {
           output.push(ops.pop())
         }
         if (ops.length === 0) return 'Error'
-        ops.pop()
-        if (ops.length && ops[ops.length - 1].type === 'function') {
-          output.push(ops.pop())
+        const opening = ops.pop()
+        if (opening.isFunctionCall) {
+          if (!previousToken || previousToken.type === 'comma') return 'Error'
+          const hasArguments = !(previousToken.type === 'parenthesis' && previousToken.value === '(')
+          const argumentCount = hasArguments ? opening.argumentCount + 1 : 0
+          if (!ops.length || ops[ops.length - 1].type !== 'function') return 'Error'
+          output.push({ ...ops.pop(), argumentCount })
         }
       }
+      previousToken = token
       continue
     }
   }
@@ -315,43 +376,72 @@ function evaluateTokens(tokens, scope) {
       stack.push(v)
       continue
     }
+    if (t.type === 'unary') {
+      if (stack.length < 1) return 'Error'
+      const value = stack.pop()
+      const def = mathRegistry.getUnaryOperator(t.value)
+      stack.push(def ? def.compute(value) : NaN)
+      continue
+    }
     if (t.type === 'function') {
       const def = mathRegistry.getFunction(t.value)
       if (!def) return 'Error'
-      const aCount = typeof def.arity === 'number' ? def.arity : (Array.isArray(def.arity) ? def.arity[0] : 0)
-      if (stack.length < aCount) return 'Error'
-      const args = []
-      for (let i = 0; i < aCount; i++) args.unshift(stack.pop())
-      const v = def.compute(...args)
+      const requiredArgumentCount = typeof def.arity === 'number' ? def.arity : (Array.isArray(def.arity) ? def.arity[0] : 0)
+      const providedArgumentCount = Number.isInteger(t.argumentCount) ? t.argumentCount : requiredArgumentCount
+      if (providedArgumentCount < requiredArgumentCount || stack.length < providedArgumentCount) return 'Error'
+      const providedArgs = stack.splice(stack.length - providedArgumentCount, providedArgumentCount)
+      const v = def.compute(...providedArgs.slice(0, requiredArgumentCount))
       stack.push(v)
       continue
     }
   }
   if (stack.length === 0) return 0
+  if (stack.length !== 1) return 'Error'
   const res = stack[stack.length - 1]
   return isNaN(res) ? 'Error' : res
 }
 
-async function evaluateExpression(expression, scope) {
+async function evaluateExpression(expression, scope, referenceNames = Object.keys(scope || {})) {
+  const tokens = decodeElements(expression, referenceNames)
+  const customResult = evaluateTokens(tokens, scope || {})
+  const reservedValues = new Set(['undefined', 'null', 'nan', 'infinity', 'true', 'false'])
+  if (
+    tokens.length === 1 &&
+    tokens[0].type === 'reference' &&
+    !Object.prototype.hasOwnProperty.call(scope || {}, tokens[0].value) &&
+    !reservedValues.has(String(tokens[0].value).toLowerCase())
+  ) {
+    return 'Error'
+  }
+  const normalizedSource = String(expression || '').replace(/\s/g, '').toLowerCase()
+  const normalizedTokens = tokens.map(token => token.value).join('').toLowerCase()
+  if (customResult !== 'Error' || normalizedSource === normalizedTokens) return customResult
   try {
     const { evaluate } = await loadMathjs()
     const v = evaluate(String(expression || ''), scope || {})
     return typeof v === 'number' && isFinite(v) ? v : (typeof v === 'bigint' ? Number(v) : NaN)
   } catch (e) {
-    const tokens = decodeElements(expression)
-    return evaluateTokens(tokens, scope || {})
+    return customResult
   }
 }
 
-async function latexFromExpression(expression, result) {
+async function latexFromExpression(expression, result, referenceNames = []) {
+  const source = String(expression || '')
+  const tokens = decodeElements(source, referenceNames)
+  const normalizedSource = source.replace(/\s/g, '').toLowerCase()
+  const normalizedTokens = tokens.map(token => token.value).join('').toLowerCase()
+  if (tokens.length && normalizedSource === normalizedTokens) {
+    const left = astToLatex(parseTokens(tokens))
+    if (left) return left + ' = ' + formatResultLatex(result)
+  }
+
   try {
     const { parse } = await loadMathjs()
-    const node = parse(String(expression || ''))
+    const node = parse(source)
     const left = node ? node.toTex() : ''
     const right = formatResultLatex(result)
     return left + ' = ' + right
   } catch (e) {
-    const tokens = decodeElements(expression)
     const ast = parseTokens(tokens)
     const left = astToLatex(ast)
     const right = formatResultLatex(result)

@@ -26,7 +26,7 @@ function useAutocomplete(expression, expressionInputRef) {
     const el = expressionInputRef.value
     const pos = el ? el.selectionStart : String(expression.value || '').length
     const before = String(expression.value || '').slice(0, pos)
-    const m = before.match(/([a-zA-Z_][a-zA-Z0-9_]*)$/)
+    const m = before.match(/([\p{L}_][\p{L}\p{N}_]*)$/u)
     return m ? m[1] : ''
   }
 
@@ -53,7 +53,7 @@ function useAutocomplete(expression, expressionInputRef) {
     const pos = el ? el.selectionStart : String(expression.value || '').length
     const before = String(expression.value || '').slice(0, pos)
     const after = String(expression.value || '').slice(pos)
-    const m = before.match(/([a-zA-Z_][a-zA-Z0-9_]*)$/)
+    const m = before.match(/([\p{L}_][\p{L}\p{N}_]*)$/u)
     const start = m ? before.lastIndexOf(m[1]) : pos
     const newBefore = m ? before.slice(0, start) + item.label : before + item.label
     let newValue = newBefore + after

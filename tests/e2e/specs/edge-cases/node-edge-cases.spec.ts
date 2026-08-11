@@ -262,9 +262,9 @@ test.describe('节点删除边界', () => {
     await canvas.expectNodeCount(5)
 
     // 快速删除所有节点
-    const deleteButtons = await page.locator('[data-testid="node-delete"]').all()
-    for (const btn of deleteButtons) {
-      await btn.click()
+    const deleteButtons = page.locator('[data-testid="node-delete"]')
+    for (let i = 0; i < 5; i++) {
+      await deleteButtons.first().click()
       await page.waitForTimeout(50)
     }
 

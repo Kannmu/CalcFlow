@@ -1,107 +1,106 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
+import { CircleHelp, Download, Github, Trash2, Upload } from 'lucide-vue-next'
 import Canvas from './components/Canvas.vue'
 import Instruction from './components/Instruction.vue'
 import Toast from './components/Toast.vue'
-import { nodeManager } from './utils.js'
+import { createWorkspaceDocument, normalizeWorkspace } from './workspace.js'
+
 const instructionRef = ref(null)
 const canvasRef = ref(null)
 const importInputRef = ref(null)
-const LS_KEY = 'calcflow_workspace'
-
-// Toast state
+const stats = ref({ nodes: 0, dependencies: 0, errors: 0 })
 const toasts = ref([])
 let toastId = 0
 
-function showToast(message, type = 'info', duration = 3000) {
+function showToast(message, type = 'info', duration = 2800) {
   const id = ++toastId
   toasts.value.push({ id, message, type, duration })
 }
 
 function removeToast(id) {
-  const index = toasts.value.findIndex(t => t.id === id)
-  if (index > -1) {
-    toasts.value.splice(index, 1)
-  }
+  const index = toasts.value.findIndex((toast) => toast.id === id)
+  if (index !== -1) toasts.value.splice(index, 1)
 }
 
-// Listen for toast events from child components
-function handleToastEvent(e) {
-  const { message, type = 'info', duration = 2000 } = e.detail || {}
-  if (message) {
-    showToast(message, type, duration)
-  }
+function handleToastEvent(event) {
+  const { message, type = 'info', duration = 2400 } = event.detail || {}
+  if (message) showToast(message, type, duration)
 }
 
-onMounted(() => {
-  window.addEventListener('calcflow:toast', handleToastEvent)
-})
+function handleCanvasToast(payload) {
+  if (payload?.message) showToast(payload.message, payload.type)
+}
 
-onUnmounted(() => {
-  window.removeEventListener('calcflow:toast', handleToastEvent)
-})
+onMounted(() => window.addEventListener('calcflow:toast', handleToastEvent))
+onUnmounted(() => window.removeEventListener('calcflow:toast', handleToastEvent))
 
 function getWorkspaceSnapshot() {
-  const entries = Array.from(nodeManager.nodes.entries())
-  return entries.map(([id, data]) => ({ header: data.header, expression: data.expression || '' }))
+  return canvasRef.value?.workspaceSnapshot?.() || []
 }
 
 function exportWorkspace() {
-  const list = getWorkspaceSnapshot()
-  const blob = new Blob([JSON.stringify(list)], { type: 'application/json' })
+  const document = createWorkspaceDocument(getWorkspaceSnapshot())
+  const blob = new Blob([JSON.stringify(document, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'calcflow_workspace.json'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
-  showToast('Workspace exported successfully', 'success')
+  const anchor = window.document.createElement('a')
+  anchor.href = url
+  anchor.download = 'calcflow_workspace.json'
+  window.document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  showToast(`${document.nodes.length} nodes exported`, 'success')
 }
 
 function cleanWorkspace() {
-  if (canvasRef.value && typeof canvasRef.value.clearAllNodes === 'function') {
-    canvasRef.value.clearAllNodes()
-    showToast('Workspace cleared', 'info')
-  }
+  canvasRef.value?.clearAllNodes?.()
+  showToast('Workspace cleared', 'info')
 }
 
 function onImportClick() {
-  if (importInputRef.value) importInputRef.value.click()
+  importInputRef.value?.click()
 }
 
-function onImportFile(e) {
-  const file = e.target.files && e.target.files[0]
+function onImportFile(event) {
+  const file = event.target.files?.[0]
   if (!file) return
+
+  if (file.size > 2 * 1024 * 1024) {
+    showToast('Workspace file is larger than 2 MB', 'error')
+    event.target.value = ''
+    return
+  }
+
   const reader = new FileReader()
   reader.onload = () => {
     try {
-      const data = JSON.parse(String(reader.result || ''))
-      if (Array.isArray(data)) {
-        if (canvasRef.value && typeof canvasRef.value.loadWorkspaceFromArray === 'function') {
-          canvasRef.value.loadWorkspaceFromArray(data)
-        }
-        try {
-          localStorage.setItem(LS_KEY, JSON.stringify(data))
-        } catch (e) {}
-        showToast('Workspace imported successfully', 'success')
-      } else {
-        showToast('Invalid workspace file', 'error')
-      }
-    } catch (err) {
-      showToast('Failed to import workspace', 'error')
+      const nodes = normalizeWorkspace(JSON.parse(String(reader.result || '')))
+      canvasRef.value?.loadWorkspaceFromArray?.(nodes)
+      showToast(`${nodes.length} nodes imported`, 'success')
+    } catch (error) {
+      showToast(error instanceof RangeError ? error.message : 'Invalid CalcFlow workspace', 'error')
+    } finally {
+      if (importInputRef.value) importInputRef.value.value = ''
     }
+  }
+  reader.onerror = () => {
+    showToast('Workspace file could not be read', 'error')
     if (importInputRef.value) importInputRef.value.value = ''
   }
   reader.readAsText(file)
+}
+
+function useExample({ expression, header }) {
+  canvasRef.value?.addExample?.(expression, header)
+  showToast('Example added to the flow', 'success')
+  instructionRef.value?.closePanel?.()
 }
 </script>
 
 <template>
   <div class="app-container">
-    <!-- Toast Container -->
-    <div class="toast-container">
+    <div class="toast-container" aria-live="polite" aria-atomic="false">
       <Toast
         v-for="toast in toasts"
         :key="toast.id"
@@ -112,327 +111,122 @@ function onImportFile(e) {
       />
     </div>
 
-    <Instruction ref="instructionRef" />
+    <Instruction ref="instructionRef" @use-example="useExample" />
+
     <header class="app-header">
       <div class="header-content">
-        <div class="app-brand">
-          <img src="/calcflow_full.svg" class="app-logo" alt="CalcFlow logo" />
-          <h1 class="app-title">CalcFlow</h1>
+        <a class="app-brand" href="/" aria-label="CalcFlow home">
+          <span class="brand-mark"><img src="/calcflow.svg" alt="" /></span>
+          <span class="brand-copy">
+            <strong>CalcFlow</strong>
+            <small>Composable calculator</small>
+          </span>
+        </a>
+
+        <div class="workspace-presence" aria-live="polite">
+          <span class="presence-dot" :class="{ 'has-errors': stats.errors }"></span>
+          <span>{{ stats.nodes }} {{ stats.nodes === 1 ? 'node' : 'nodes' }}</span>
+          <span class="presence-divider"></span>
+          <span>{{ stats.dependencies }} {{ stats.dependencies === 1 ? 'link' : 'links' }}</span>
         </div>
-        <p class="app-subtitle">Dynamic Node-Based Calculator</p>
-        <nav class="app-nav">
-          <a href="https://kannmu.top/" target="_blank" rel="noopener noreferrer" class="nav-link">
-            <img src="/KIcon.png" alt="Kannmu's Blog" class="nav-icon" />
-            Kannmu
-          </a>
-          <a href="https://github.com/Kannmu/CalcFlow" target="_blank" rel="noopener noreferrer" class="nav-link">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-            </svg>
-            GitHub
-          </a>
 
-          <a href="#" class="nav-link" data-testid="nav-clean" @click.prevent="cleanWorkspace">
-            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
-            Clean
-          </a>
-
-          <a href="#" class="nav-link" data-testid="nav-export" @click.prevent="exportWorkspace">
-            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 18 12 23 17 18" transform="scale(1,-1) translate(0,-27)"/><line x1="12" y1="7" x2="12" y2="17"/></svg>
-            Export
-          </a>
-
-          <a href="#" class="nav-link" data-testid="nav-import" @click.prevent="onImportClick">
-            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Import
-          </a>
-          <input ref="importInputRef" data-testid="import-file-input" type="file" accept="application/json" style="display:none" @change="onImportFile" />
-          
-          <a href="#" class="nav-link" data-testid="nav-instructions" @click.prevent="instructionRef?.togglePanel()">
-            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-            Instructions
-          </a>
+        <nav class="app-nav" aria-label="Workspace actions">
+          <button type="button" class="nav-link" data-testid="nav-export" title="Export workspace" aria-label="Export workspace" @click="exportWorkspace">
+            <Download :size="17" />
+            <span class="nav-label">Export</span>
+          </button>
+          <button type="button" class="nav-link" data-testid="nav-import" title="Import workspace" aria-label="Import workspace" @click="onImportClick">
+            <Upload :size="17" />
+            <span class="nav-label">Import</span>
+          </button>
+          <input ref="importInputRef" data-testid="import-file-input" type="file" accept="application/json,.json" hidden @change="onImportFile" />
+          <button type="button" class="nav-link danger-action" data-testid="nav-clean" title="Clear workspace" aria-label="Clear workspace" @click="cleanWorkspace">
+            <Trash2 :size="17" />
+            <span class="nav-label">Clear</span>
+          </button>
+          <button type="button" class="nav-link" data-testid="nav-instructions" title="Open formula guide" aria-label="Open formula guide" @click="instructionRef?.togglePanel()">
+            <CircleHelp :size="18" />
+            <span class="nav-label">Guide</span>
+          </button>
         </nav>
       </div>
     </header>
 
     <main class="app-main">
-      <Canvas ref="canvasRef" />
+      <Canvas ref="canvasRef" @stats="stats = $event" @toast="handleCanvasToast" />
     </main>
 
     <footer class="app-footer">
       <div class="footer-content">
-        <div class="footer-shortcuts">
-          <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Add Node
-          <span class="shortcut-divider">|</span>
-          <kbd>Ctrl</kbd>+<kbd>D</kbd> Duplicate
-          <span class="shortcut-divider">|</span>
-          <kbd>Escape</kbd> Cancel
-          <span class="shortcut-divider">|</span>
-          Drag to Reorder
+        <p>One idea per node. Every dependency visible.</p>
+        <div class="footer-meta">
+          <span class="shortcut"><kbd>Ctrl</kbd><span>+</span><kbd>Enter</kbd><span>Add</span></span>
+          <span class="shortcut"><kbd>Ctrl</kbd><span>+</span><kbd>D</kbd><span>Duplicate</span></span>
+          <a href="https://github.com/Kannmu/CalcFlow" target="_blank" rel="noopener noreferrer"><Github :size="15" />Source</a>
+          <a href="https://kannmu.top/" target="_blank" rel="noopener noreferrer">Kannmu</a>
         </div>
-        <p class="footer-text">
-          Created by <a href="https://kannmu.top/" target="_blank" rel="noopener noreferrer" class="footer-link">Kannmu</a>
-        </p>
-        <p class="footer-description">
-          A sophisticated node-based calculator for complex mathematical expressions
-        </p>
       </div>
     </footer>
   </div>
 </template>
 
 <style scoped>
-.app-container {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.toast-container {
-  position: fixed;
-  top: var(--space-4);
-  right: var(--space-4);
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  pointer-events: none;
-}
-
-.toast-container > * {
-  pointer-events: auto;
-}
-
-@media (max-width: 640px) {
-  .toast-container {
-    top: auto;
-    bottom: var(--space-4);
-    left: var(--space-4);
-    right: var(--space-4);
-    align-items: center;
-  }
-}
+.app-container { min-height: 100vh; display: flex; flex-direction: column; }
+.toast-container { position: fixed; z-index: 2000; top: 76px; right: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); pointer-events: none; }
+.toast-container > * { pointer-events: auto; }
 
 .app-header {
-  background: var(--color-white);
-  border-bottom: 1px solid var(--color-mist);
-  padding: var(--space-10) 0 var(--space-8);
-  text-align: center;
-  position: relative;
+  position: sticky;
+  z-index: 100;
+  top: 0;
+  background: rgba(251, 252, 250, 0.88);
+  border-bottom: 1px solid rgba(207, 213, 216, 0.8);
+  backdrop-filter: blur(18px) saturate(130%);
+}
+.header-content { min-height: 64px; max-width: 1240px; margin: 0 auto; padding: 0 var(--space-6); display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr); align-items: center; gap: var(--space-6); }
+.app-brand { width: fit-content; display: inline-flex; align-items: center; gap: var(--space-3); color: var(--color-ink); text-decoration: none; }
+.brand-mark { width: 32px; height: 32px; display: grid; place-items: center; overflow: hidden; background: var(--color-ink); border-radius: var(--radius-md); }
+.brand-mark img { width: 23px; height: 25px; object-fit: contain; filter: grayscale(1) brightness(3); }
+.brand-copy strong { display: block; font-size: 0.9rem; font-weight: 720; line-height: 1.1; }
+.brand-copy small { display: block; margin-top: 3px; color: var(--color-slate); font-family: var(--font-mono); font-size: 0.58rem; }
+
+.workspace-presence { display: flex; align-items: center; gap: var(--space-2); color: var(--color-slate); font-family: var(--font-mono); font-size: 0.63rem; text-transform: uppercase; white-space: nowrap; }
+.presence-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-success); }
+.presence-dot.has-errors { background: var(--color-error); }
+.presence-divider { width: 1px; height: 12px; background: var(--color-cloud); }
+
+.app-nav { display: flex; align-items: center; justify-content: flex-end; gap: 3px; }
+.nav-link { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 var(--space-3); border-radius: var(--radius-sm); background: transparent; color: var(--color-slate); cursor: pointer; font-size: 0.72rem; font-weight: 600; transition: background 140ms ease, color 140ms ease; }
+.nav-link:hover { background: var(--color-paper); color: var(--color-ink); }
+.danger-action:hover { background: var(--color-error-bg); color: var(--color-error); }
+
+.app-main { flex: 1; width: 100%; padding: clamp(2rem, 6vw, 4.75rem) clamp(1rem, 4vw, 2.5rem); }
+.app-footer { border-top: 1px solid var(--color-mist); background: rgba(251,252,250,0.68); }
+.footer-content { min-height: 76px; max-width: 1240px; margin: 0 auto; padding: var(--space-4) var(--space-6); display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); }
+.footer-content > p { color: var(--color-slate); font-size: 0.72rem; }
+.footer-meta { display: flex; align-items: center; gap: var(--space-4); color: var(--color-slate); font-size: 0.68rem; }
+.footer-meta a, .shortcut { display: inline-flex; align-items: center; gap: 5px; color: var(--color-slate); text-decoration: none; }
+.footer-meta a:hover { color: var(--color-ink); }
+kbd { min-width: 22px; height: 22px; display: inline-grid; place-items: center; padding: 0 5px; background: var(--color-white); border: 1px solid var(--color-mist); border-bottom-color: var(--color-cloud); border-radius: var(--radius-sm); color: var(--color-ink-light); font-family: var(--font-mono); font-size: 0.58rem; }
+
+@media (max-width: 940px) {
+  .header-content { grid-template-columns: 1fr auto; }
+  .workspace-presence { display: none; }
+  .nav-label { display: none; }
+  .nav-link { width: 38px; padding: 0; }
 }
 
-.app-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 60px;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
-  border-radius: 2px;
+@media (max-width: 620px) {
+  .header-content { min-height: 58px; padding: 0 var(--space-3); gap: var(--space-2); }
+  .brand-mark { width: 30px; height: 30px; }
+  .brand-copy small { display: none; }
+  .app-main { padding: var(--space-6) var(--space-3) var(--space-8); }
+  .toast-container { top: auto; right: var(--space-3); bottom: var(--space-3); left: var(--space-3); align-items: stretch; }
+  .footer-content { align-items: flex-start; flex-direction: column; padding: var(--space-5) var(--space-4); gap: var(--space-3); }
+  .shortcut { display: none; }
 }
 
-.header-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 var(--space-6);
-}
-
-.app-brand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-2);
-}
-
-.app-logo {
-  width: 80px;
-  height: auto;
-  opacity: 0.9;
-}
-
-.app-title {
-  font-size: 3.5rem;
-  font-weight: 800;
-  color: var(--color-ink);
-  margin: 0;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-
-.app-subtitle {
-  font-size: 1rem;
-  color: var(--color-slate);
-  margin: 0 0 var(--space-6) 0;
-  font-weight: 400;
-  letter-spacing: 0.02em;
-}
-
-.app-nav {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.nav-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-white);
-  border: 1px solid var(--color-mist);
-  border-radius: var(--radius-md);
-  color: var(--color-ink-light);
-  text-decoration: none;
-  font-weight: 500;
-  font-size: 0.875rem;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: var(--shadow-sm);
-}
-
-.nav-link:hover {
-  background: var(--color-paper);
-  border-color: var(--color-cloud);
-  color: var(--color-ink);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.nav-link:active {
-  transform: translateY(0);
-}
-
-.nav-icon {
-  width: 1.125rem;
-  height: 1.125rem;
-  opacity: 0.7;
-}
-
-.nav-link:hover .nav-icon {
-  opacity: 1;
-}
-
-.app-main {
-  flex: 1;
-  padding: var(--space-8) var(--space-6);
-  display: flex;
-  justify-content: center;
-}
-
-.app-footer {
-  background: var(--color-white);
-  border-top: 1px solid var(--color-mist);
-  padding: var(--space-6) 0;
-  text-align: center;
-}
-
-.footer-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 var(--space-6);
-}
-
-.footer-text {
-  font-size: 0.875rem;
-  color: var(--color-slate);
-  margin: 0 0 var(--space-2) 0;
-}
-
-.footer-description {
-  font-size: 0.75rem;
-  color: var(--color-silver);
-  margin: 0;
-  letter-spacing: 0.01em;
-}
-
-.footer-link {
-  color: var(--color-accent);
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.15s ease;
-}
-
-.footer-link:hover {
-  color: var(--color-ink);
-}
-
-.footer-shortcuts {
-  font-size: 0.75rem;
-  color: var(--color-silver);
-  margin-bottom: var(--space-4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.footer-shortcuts kbd {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-1) var(--space-2);
-  font-size: 0.6875rem;
-  font-family: var(--font-mono);
-  background: var(--color-paper);
-  border: 1px solid var(--color-cloud);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 1px 0 var(--color-white), inset 0 1px 2px rgba(15, 23, 42, 0.05);
-  color: var(--color-ink-light);
-  min-height: 22px;
-}
-
-.shortcut-divider {
-  color: var(--color-cloud);
-  margin: 0 var(--space-1);
-}
-
-@media (max-width: 768px) {
-  .app-title {
-    font-size: 2.25rem;
-  }
-
-  .app-subtitle {
-    font-size: 0.9375rem;
-  }
-
-  .app-header {
-    padding: var(--space-6) 0 var(--space-6);
-  }
-
-  .header-content,
-  .footer-content {
-    padding: 0 var(--space-4);
-  }
-
-  .app-main {
-    padding: var(--space-6) var(--space-4);
-  }
-}
-
-@media (max-width: 640px) {
-  .app-nav {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-2);
-  }
-  .nav-link {
-    width: 100%;
-    justify-content: center;
-    padding: var(--space-3) var(--space-4);
-  }
-
-  .footer-shortcuts {
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .shortcut-divider {
-    display: none;
-  }
+@media (max-width: 360px) {
+  .brand-copy { display: none; }
 }
 </style>

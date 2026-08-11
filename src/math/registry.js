@@ -143,6 +143,7 @@ const mathRegistry = (function () {
     }
 
     registerConstant('pi', { value: Math.PI })
+    registerConstant('infinity', { value: Infinity })
   }
 
   initDefaults()

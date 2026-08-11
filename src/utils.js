@@ -7,6 +7,37 @@ class NodeManager {
         this.nodes = reactive(new Map())
         this.dependencyGraph = reactive(new Map())
         this.reverseDependencyGraph = reactive(new Map())
+        this.registrationRefreshScheduled = false
+        this.fullRefreshInProgress = false
+        this.fullRefreshRequested = false
+    }
+
+    scheduleFullRefresh() {
+        this.fullRefreshRequested = true
+        if (this.registrationRefreshScheduled || this.fullRefreshInProgress) return
+
+        this.registrationRefreshScheduled = true
+        Promise.resolve().then(async () => {
+            this.registrationRefreshScheduled = false
+            if (this.fullRefreshInProgress) return
+
+            this.fullRefreshInProgress = true
+            try {
+                while (this.fullRefreshRequested) {
+                    this.fullRefreshRequested = false
+                    const nodes = Array.from(this.nodes.values())
+                    nodes.forEach(node => (node.dependencyCallback || node.onNewNodeRegistered)?.())
+
+                    const order = this.getTopologicalOrder()
+                    for (const nodeId of order) {
+                        await this.nodes.get(nodeId)?.updateCallback?.()
+                    }
+                }
+            } finally {
+                this.fullRefreshInProgress = false
+                if (this.fullRefreshRequested) this.scheduleFullRefresh()
+            }
+        })
     }
 
     registerNode(nodeId, nodeData) {
@@ -19,16 +50,15 @@ class NodeManager {
         }
         // 当新节点注册时，触发所有现有节点同步更新依赖
         // 这样引用新节点的节点可以立即建立依赖关系
-        this.nodes.forEach((node, id) => {
-            if (id !== nodeId && node.onNewNodeRegistered) {
-                node.onNewNodeRegistered()
-            }
-        })
+        this.scheduleFullRefresh()
     }
 
     unregisterNode(nodeId) {
         const dependents = this.dependencyGraph.get(nodeId) || new Set()
         const dependencies = this.reverseDependencyGraph.get(nodeId) || new Set()
+        const dependentCallbacks = Array.from(dependents)
+            .map(id => this.nodes.get(id)?.updateCallback)
+            .filter(Boolean)
 
         dependents.forEach(dependentId => {
             const deps = this.reverseDependencyGraph.get(dependentId)
@@ -47,6 +77,10 @@ class NodeManager {
         this.nodes.delete(nodeId)
         this.dependencyGraph.delete(nodeId)
         this.reverseDependencyGraph.delete(nodeId)
+
+        Promise.resolve().then(() => {
+            dependentCallbacks.forEach(callback => callback())
+        })
     }
 
     updateNode(nodeId, nodeData) {
@@ -54,21 +88,8 @@ class NodeManager {
             const oldNode = this.nodes.get(nodeId)
             const oldHeader = oldNode.header
             this.nodes.set(nodeId, { ...oldNode, ...nodeData })
-            // 如果header改变了，触发所有节点重新计算
-            // 这样引用新header的节点可以建立依赖关系
             if (nodeData.header !== undefined && nodeData.header !== oldHeader) {
-                this.nodes.forEach((node, id) => {
-                    if (id !== nodeId) {
-                        // 先同步更新依赖，再触发重新计算
-                        if (node.onNewNodeRegistered) {
-                            node.onNewNodeRegistered()
-                        }
-                        // 触发完整重新计算以传播错误
-                        if (node.updateCallback) {
-                            node.updateCallback()
-                        }
-                    }
-                })
+                this.scheduleFullRefresh()
             }
         }
     }
@@ -165,6 +186,7 @@ class NodeManager {
     }
 
     triggerDependentUpdates(nodeId) {
+        if (this.fullRefreshInProgress) return
         const visited = new Set()
         const stack = [nodeId]
         while (stack.length) {
